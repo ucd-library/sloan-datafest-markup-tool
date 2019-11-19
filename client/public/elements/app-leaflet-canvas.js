@@ -2,6 +2,7 @@ import { LitElement } from 'lit-element';
 import render from "./app-leaflet-canvas.tpl.js"
 
 import "leaflet"
+import "./app-page-nav"
 
 export default class AppLeafletCanvas extends Mixin(LitElement)
   .with(LitCorkUtils) {
@@ -33,7 +34,20 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
       zoomControl : false
     });
 
-    // this.showImage('https://digital.ucdavis.edu/fcrepo/rest/collection/sherry-lehmann/D-637/d7k06n/media/images/d7k06n-026.jpg/svc:iiif/full/,1000/0/default.jpg');
+    L.Control.AppNav = L.Control.extend({
+      onAdd: function(map) {
+        let ele = L.DomUtil.create('app-page-nav');
+        if( this.options.next ) ele.setAttribute('next', 'true');
+        return ele;
+      },
+  
+      onRemove: function(map) {}
+    });
+    L.control.appNav = function(opts) {
+      return new L.Control.AppNav(opts);
+    }
+    L.control.appNav({ position: 'bottomleft'}).addTo(this.viewer);
+    L.control.appNav({ position: 'bottomright', next: true  }).addTo(this.viewer);
   }
 
   _onAppStateUpdate(e) {

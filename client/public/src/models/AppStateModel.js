@@ -10,6 +10,8 @@ class AppStateModelImpl extends AppStateModel {
 
 
   set(state) {
+    state = Object.assign({}, this.store.data, state);
+
     state.page = 'map';
 
     if( state.location.fullpath !== '/' ) {
