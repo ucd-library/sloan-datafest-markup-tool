@@ -27,7 +27,7 @@ module.exports = (app) => {
     getConfig : async (req, res, next) => {
       next({
         appRoutes : config.server.appRoutes,
-        gaCode : config.client.gaCode
+        damsHost : config.dams.host
       });
     },
     template : async (req, res, next) => {

@@ -1,4 +1,5 @@
 module.exports = {
   AppStateModel : require('./models/AppStateModel'),
-  PageModel : require('./models/PageModel')
+  PageModel : require('./models/PageModel'),
+  MarkModel : require('./models/MarkModel')
 }

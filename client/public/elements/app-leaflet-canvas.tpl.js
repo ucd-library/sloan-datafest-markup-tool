@@ -16,6 +16,6 @@ return html`
   }
 </style>  
 
-<div id="map"></div>
+<div id="map" @click="${this._onViewerClicked}"></div>
 
 `;}

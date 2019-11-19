@@ -15,6 +15,7 @@
     "@ucd-lib/cork-app-state": "^1.0.0",
     "@ucd-lib/cork-app-utils": "^4.3.3",
     "leaflet": "^1.6.0",
-    "lit-element": "^2.2.1"
+    "lit-element": "^2.2.1",
+    "uuid": "^3.3.3"
   }
 }

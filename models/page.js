@@ -15,9 +15,9 @@ class PageModel {
     return page.rows[0];
   }
 
-  getPageImageUrl(pageId, size=',1000') {
+  getPageImageUrl(pageId) {
     if( !pageId.startsWith('/') ) pageId = '/'+pageId;
-    return `${config.dams.host}/fcrepo/rest${pageId}/svc:iiif/full/${size}/0/default.jpg`
+    return `${config.dams.host}/fcrepo/rest${pageId}`;
   }
 
 }
