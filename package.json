@@ -1,5 +1,5 @@
 {
-  "name": "@ucd-lib/sload-datafest-markup-tool",
+  "name": "@ucd-lib/sloan-datafest-markup-tool",
   "version": "0.0.1",
   "description": "",
   "main": "index.js",
@@ -16,6 +16,10 @@
   },
   "dependencies": {
     "@ucd-lib/spa-router-middleware": "^0.1.0",
-    "express": "^4.17.1"
+    "express": "^4.17.1",
+    "http-proxy": "^1.18.0",
+    "pg": "^7.13.0",
+    "request": "^2.88.0",
+    "xml2js": "^0.4.22"
   }
 }

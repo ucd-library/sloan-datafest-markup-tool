@@ -1,5 +1,5 @@
 const router = require('express').Router();
 
-router.use('/marks', require('./marks'));
+router.use('/page', require('./page'));
 
 module.exports = router;

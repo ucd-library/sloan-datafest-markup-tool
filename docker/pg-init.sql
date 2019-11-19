@@ -4,10 +4,16 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 SET search_path = datafest,public,pg_catalog;
 
 -- CREATE TABLES
+CREATE TABLE catalog (
+  catalog_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL
+);
+
 CREATE TABLE page (
   page_id TEXT PRIMARY KEY,
+  catalog_id TEXT  REFERENCES catalog NOT NULL,
   index INTEGER NOT NULL,
-  catalog_id TEXT NOT NULL
+  score INTEGER
 );
 
 CREATE TABLE mark (
@@ -23,8 +29,6 @@ CREATE TABLE mark (
   vintage INTEGER,
   price INTEGER
 );
-
-
 
 -- CREATE ROLES
 CREATE ROLE anon;
