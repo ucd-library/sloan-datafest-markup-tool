@@ -1,0 +1,39 @@
+version: '3'
+
+services:
+  pg:
+    image: postgres:10.11
+    ports:
+      - 5432:5432
+    volumes:
+      - pg-storage:/var/lib/postgresql/data/
+      - ../pg-init.sql:/docker-entrypoint-initdb.d/pg-init.sql
+
+  pgr:
+    image: postgrest/postgrest
+    environment:
+      - PGRST_DB_URI=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pg:5432/postgres
+      - PGRST_DB_SCHEMA=datafest
+      - PGRST_DB_ANON_ROLE=anon
+    ports:
+      - "3001:3000"
+    depends_on:
+      - pg
+  
+  app:
+    build: ../..
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../../lib:/app/lib
+      - ../../controllers:/app/controllers
+      - ../../index.js:/app/index.js
+      - ../../client/public/elements:/app/client/public/elements
+      - ../../client/public/src:/app/client/public/src
+      - ../../client/public/loader:/app/client/public/loader
+      - ../../client/public/js:/app/client/public/js
+      - ../../client/public/index.html:/app/client/public/index.html
+    command: bash -c "tail -f /dev/null"
+
+volumes:
+  pg-storage:
