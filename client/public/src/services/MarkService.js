@@ -12,6 +12,10 @@ class MarkService extends BaseService {
     this.store.setMarkLoaded(data);
   }
 
+  delete(data) {
+    this.store.setMarkDeleted(data);
+  }
+
 }
 
 module.exports = new MarkService();

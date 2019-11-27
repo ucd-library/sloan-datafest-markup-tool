@@ -3,6 +3,7 @@ import render from "./app-leaflet-canvas.tpl.js"
 
 import "leaflet"
 import "./app-page-nav"
+import { resolveUrl } from '@polymer/polymer/lib/utils/resolve-url';
 
 export default class AppLeafletCanvas extends Mixin(LitElement)
   .with(LitCorkUtils) {
@@ -24,7 +25,8 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
       map : this.shadowRoot.querySelector('#map')
     }
 
-    this.marks = [];
+    this.renderedPolygons = [];
+
     window.addEventListener('mousemove', e => this._onMouseMove(e));
 
     this._initMap();
@@ -36,6 +38,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
       minZoom: -4,
       zoomControl : false
     });
+    this.viewer.on('click', e => this._onViewerClicked(e));
 
     L.Control.AppNav = L.Control.extend({
       onAdd: function(map) {
@@ -54,6 +57,14 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
   }
 
   _onAppStateUpdate(e) {
+    if( this.selectedMark !== e.selectedMark ) {
+      this.drawingPolygon = null;
+      this.drawingStart = null;
+    }
+
+    this.selectedMark = e.selectedMark;
+    this.renderSelectedMark();
+
     if( !e.selectedPage ) return;
     if( e.selectedPage === this.selectedPage ) return;
     this.selectedPage = e.selectedPage;
@@ -72,13 +83,6 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
 
     this.overlay = L.imageOverlay(url, this.bounds).addTo(this.viewer);
     this.viewer.fitBounds(this.bounds);
-  }
-
-  clearMarks() {
-    for( let mark of this.marks ) {
-      this.viewer.removeLayer(mark.polygon);
-    }
-    this.marks = [];
   }
 
   /**
@@ -106,7 +110,19 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
     });
   }
 
+  clearMarks() {
+    for( let polygon of this.renderedPolygons ) {
+      this.viewer.removeLayer(polygon);
+    }
+    this.renderedPolygons = [];
+  }
+
   _onViewerClicked(e) {
+    if( e.originalEvent ) e = e.originalEvent;
+
+    if( !this.selectedMark ) return;
+    if( this.selectedMark.renderState !== 'drawing' ) return;
+
     let ll = this.viewer.containerPointToLatLng([e.x, e.y]);
 
     if( !this.drawingPolygon ) {
@@ -118,7 +134,6 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
       this.viewer.removeLayer(this.drawingPolygon);
 
       let mark = {
-        page_id : this.selectedPage,
         top : this.bounds[1][0] - this.drawingStart.lat,
         left : this.drawingStart.lng,
         bottom : this.bounds[1][0] - ll.lat,
@@ -139,7 +154,17 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
       this.drawingPolygon = null;
       this.drawingStart = null;
 
-      this.MarkModel.set(mark);
+      if( this.selectedMark.payload.top === undefined ) {
+        this.selectedMark.payload = Object.assign(this.selectedMark.payload, mark);
+        this.renderSelectedMark();
+      } else {
+        this.selectedMark.payload.region = mark;
+        this.selectedMark.matched = true;
+
+        this.MarkModel.setState(this.selectedMark, null);
+      }
+
+      this.MarkModel.set(this.selectedMark);
     }
   }
 
@@ -155,22 +180,117 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
     ])
   }
 
-  _onPageMarksUpdate(e) {
+  renderSelectedMark() {
     this.clearMarks();
 
-    for( let id in e ) {
-      let mark = e[id].payload;
+    if( !this.selectedMark ) return;
+    if( this.selectedMark.renderState === '' ) return;
 
-      mark.polygon = L.polygon([
+    let mark = this.selectedMark.payload;
+
+    if( mark.top !== undefined ) {
+      var tlIcon = L.divIcon({
+        className: 'section-top-left',
+        html : '<iron-icon icon="star"></iron-icon>'
+      });
+      this.selectedMark.mark = L.marker([this.bounds[1][0] - mark.top, mark.left], {icon: tlIcon}).addTo(this.viewer);
+      this.renderedPolygons.push(this.selectedMark.mark);
+
+      this.selectedMark.polygon = L.polygon([
         [this.bounds[1][0] - mark.top, mark.left], 
         [this.bounds[1][0] - mark.top, mark.right], 
         [this.bounds[1][0] - mark.bottom, mark.right],
         [this.bounds[1][0] - mark.bottom, mark.left]
-      ]).addTo(this.viewer);
-
-      this.marks.push(mark);
+      ],{mark}).addTo(this.viewer);
+      this.renderedPolygons.push(this.selectedMark.polygon);
     }
+
+    if( mark.region && mark.region.top !== undefined ) {
+      this.selectedMark.regionPolygon = L.polygon([
+        [this.bounds[1][0] - mark.region.top, mark.region.left], 
+        [this.bounds[1][0] - mark.region.top, mark.region.right], 
+        [this.bounds[1][0] - mark.region.bottom, mark.region.right],
+        [this.bounds[1][0] - mark.region.bottom, mark.region.left]
+      ],{mark}).addTo(this.viewer);
+      this.renderedPolygons.push(this.selectedMark.regionPolygon);
+    }
+
+    // mark.polygon.on('click', e => this._onPolygonClicked(e));
+    // mark.region.polygon.on('click', e => this._onPolygonClicked(e));
+
+    
   }
+
+  // _onPolygonClicked(e) {
+  //   L.DomEvent.stopPropagation(e);
+  //   L.DomEvent.preventDefault(e);
+
+  //   if( !this.selectedMark ) {
+  //     this._selectPolygon(e.target.options.mark);
+  //     return;
+  //   }
+
+  //   if( !this.selectedMark.section ) {
+  //     this._selectPolygon(e.target.options.mark);
+  //     return;
+  //   }
+
+  //   this.MarkModel.toggleParent(e.target.options.mark, this.selectedMark);
+  // }
+
+  // _selectPolygon(selectedMark) {
+  //   if( this.selectMarkTimer ) {
+  //     clearTimeout(this.selectedMarkTimer);
+  //   }
+
+  //   this.selectMarkTimer = setTimeout(() => {
+  //     this.selectMarkTimer = false;
+  //     this._selectPolygonAsync(selectedMark);
+  //   }, 50);
+  // }
+
+  // _selectPolygon(selectedMark) {
+  //   for( let mark of this.marks ) {
+  //     if( mark === selectedMark ) continue;
+  //     mark.selected = false;
+  //     mark.polygon.setStyle({
+  //       fillColor : '#3388ff',
+  //       color: '#3388ff'
+  //     });
+  //   }
+
+  //   if( selectedMark ) {
+  //     selectedMark.selected = true;
+  //     if( selectedMark.polygon ) {
+  //       selectedMark.polygon.setStyle({
+  //         fillColor : 'red',
+  //         color : 'red'
+  //       });
+
+  //       if( selectedMark.section ) {
+  //         let cll = selectedMark.polygon.getBounds().getCenter();
+
+  //         for( let mark of this.marks ) {
+  //           if( mark.parent_mark_id === selectedMark.mark_id ) {
+  //             mark.polygon.setStyle({color: 'orange', fillColor: 'orange'});
+  //             let polyline = L.polyline(
+  //               [cll, mark.polygon.getBounds().getCenter()], 
+  //               {color: 'red'}
+  //             ).addTo(this.viewer);
+  //             this.connectionLines.push(polyline);
+  //           }
+  //         }
+  //       }
+  //     }
+
+  //     this.AppStateModel.set({selectedMark});
+  //   } else {
+  //     for( let line of this.connectionLines ) {
+  //       this.viewer.removeLayer(line);
+  //     }
+  //     this.connectionLines = [];
+  //   }
+  // }
 
 }
 

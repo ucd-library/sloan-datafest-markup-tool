@@ -18,16 +18,20 @@ CREATE TABLE page (
 
 CREATE TABLE mark (
   mark_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id TEXT NOT NULL,
+  parent_mark_id UUID REFERENCES mark,
   page_id TEXT REFERENCES page NOT NULL,
+  user_id TEXT NOT NULL,
   top INTEGER NOT NULL,
   "left" INTEGER NOT NULL,
   bottom INTEGER NOT NULL,
   "right" INTEGER NOT NULL,
-  "type" TEXT,
+  section BOOLEAN,
+  wine_type TEXT,
+  bottle_type TEXT,
   color TEXT,
   vintage INTEGER,
-  price INTEGER
+  bottle_price FLOAT,
+  case_price FLOAT
 );
 
 -- CREATE ROLES
@@ -49,6 +53,8 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA datafest TO anon;
 GRANT SELECT ON ALL TABLES IN SCHEMA datafest TO datafestuser;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA datafest TO datafestuser;
 GRANT INSERT ON datafest.mark TO datafestuser;
+GRANT UPDATE ON datafest.mark TO datafestuser;
+GRANT DELETE ON datafest.mark TO datafestuser;
 
 GRANT usage ON SCHEMA datafest TO admin;
 grant all on all tables in schema datafest to admin;

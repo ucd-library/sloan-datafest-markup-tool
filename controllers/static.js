@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const spaMiddleware = require('@ucd-lib/spa-router-middleware');
 const config = require('../lib/config');
+const jwt = require('../lib/jwt');
 
 const bundle = `
   <script>
@@ -27,7 +28,11 @@ module.exports = (app) => {
     getConfig : async (req, res, next) => {
       next({
         appRoutes : config.server.appRoutes,
-        damsHost : config.dams.host
+        damsHost : config.dams.host,
+        user : {
+          username: 'alice'
+        },
+        token : jwt.mint('alice')
       });
     },
     template : async (req, res, next) => {

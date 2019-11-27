@@ -14,8 +14,16 @@ return html`
   #map {
     height: 100%;
   }
-</style>  
 
-<div id="map" @click="${this._onViewerClicked}"></div>
+  iron-icon[icon="star"] {
+    color: white;
+    background-color: #3e9b96;
+    border-radius: 16px;
+    margin: -44px 0 0 -12px;
+    padding: 5px;
+  }
+</style>
+
+<div id="map"></div>
 
 `;}
