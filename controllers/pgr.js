@@ -10,10 +10,7 @@ proxy.on('error', e => {
 });
 
 module.exports = (req, res) => {
-  console.log('here');
   let url = `${config.pgr.host}${req.originalUrl.replace(/\/pgr/, '')}`;
-  console.log(`proxy request: ${url}`);
-
   proxy.web(req, res, {
     target : url
   });

@@ -18,18 +18,22 @@ CREATE TABLE page (
 
 CREATE TABLE mark (
   mark_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  parent_mark_id UUID REFERENCES mark,
   page_id TEXT REFERENCES page NOT NULL,
   user_id TEXT NOT NULL,
-  top INTEGER NOT NULL,
-  "left" INTEGER NOT NULL,
-  bottom INTEGER NOT NULL,
-  "right" INTEGER NOT NULL,
-  section BOOLEAN,
+  type TEXT,
+  implicator_top INTEGER,
+  implicator_left INTEGER,
+  implicator_bottom INTEGER,
+  implicator_right INTEGER,
+  region_top INTEGER,
+  region_left INTEGER,
+  region_bottom INTEGER,
+  region_right INTEGER,
   wine_type TEXT,
   bottle_type TEXT,
   color TEXT,
   vintage INTEGER,
+  country TEXT,
   bottle_price FLOAT,
   case_price FLOAT
 );

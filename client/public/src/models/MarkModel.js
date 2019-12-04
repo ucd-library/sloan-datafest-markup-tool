@@ -31,6 +31,18 @@ class MarkModel extends BaseModel {
     }
   }
 
+  async getPageMarks(pageId) {
+    let loading = this.store.pageLoading[pageId];
+
+    if( loading ) {
+      await loading;
+    } else {
+      await this.service.getUserPageMarks(pageId, 'alice');
+    }
+
+    return this.store.data[pageId] || {};
+  }
+
   async set(data) {
     if( data.payload ) data = data.payload;
 
@@ -49,7 +61,7 @@ class MarkModel extends BaseModel {
     await this.service.delete(mark);
 
     let selectedMark = AppStateModel.store.data.selectedMark;
-    if( selectedMark.payload === mark ) {
+    if( selectedMark && selectedMark.payload === mark ) {
       AppStateModel.set({selectedMark: null});
     }
 

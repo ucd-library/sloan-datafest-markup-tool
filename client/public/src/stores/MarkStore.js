@@ -6,9 +6,19 @@ class MarkStore extends BaseStore {
     super();
 
     this.data = {};
+    this.pageLoading = {};
+
     this.events = {
       PAGE_MARKS_UPDATE : 'page-marks-update'
     };
+  }
+
+  setPageMarksLoading(pageId, request) {
+    this.pageLoading[pageId] = request;
+  }
+
+  setPageMarksLoaded(pageId) {
+    this.pageLoading[pageId] = null;
   }
 
   setMarkSaving(request, mark) {
@@ -26,12 +36,27 @@ class MarkStore extends BaseStore {
     });
   }
 
+  setMarkDeleting(request, mark) {
+    this._setMarkState({
+      state : this.STATE.DELETING,
+      request,
+      payload : mark
+    });
+  }
+
+  setMarkDeleteError(mark) {
+    this._setMarkState({
+      state : this.STATE.DELETE_ERROR,
+      payload : mark
+    });
+  }
+
   setMarkDeleted(mark) {
     delete this.data[mark.page_id][mark.mark_id];
     this.emit(this.events.PAGE_MARKS_UPDATE, this.data[mark.page_id]);
   }
 
-  setMarkSaveError(mark) {
+  setMarkSaveError(error, mark) {
     this._setMarkState({
       state : this.STATE.SAVE_ERROR,
       error : error,

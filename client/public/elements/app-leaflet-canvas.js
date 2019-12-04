@@ -37,21 +37,6 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
       zoomControl : false
     });
     this.viewer.on('click', e => this._onViewerClicked(e));
-
-    // L.Control.AppNav = L.Control.extend({
-    //   onAdd: function(map) {
-    //     let ele = L.DomUtil.create('app-page-nav');
-    //     if( this.options.next ) ele.setAttribute('next', 'true');
-    //     return ele;
-    //   },
-  
-    //   onRemove: function(map) {}
-    // });
-    // L.control.appNav = function(opts) {
-    //   return new L.Control.AppNav(opts);
-    // }
-    // L.control.appNav({ position: 'bottomleft'}).addTo(this.viewer);
-    // L.control.appNav({ position: 'bottomright', next: true  }).addTo(this.viewer);
   }
 
   _onAppStateUpdate(e) {
@@ -72,6 +57,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
   }
 
   async showImage(url) {
+    this.currentUrl = url;
     if( this.overlay ) {
       this.viewer.removeLayer(this.overlay);
       this.overlay = null;
@@ -79,6 +65,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
     this.clearMarks();
 
     await this._loadImage(url);
+    if( url !== this.currentUrl ) return;
 
     this.overlay = L.imageOverlay(url, this.bounds).addTo(this.viewer);
     this.viewer.fitBounds(this.bounds);
@@ -153,11 +140,17 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
       this.drawingPolygon = null;
       this.drawingStart = null;
 
-      if( this.selectedMark.payload.top === undefined ) {
-        this.selectedMark.payload = Object.assign(this.selectedMark.payload, mark);
+      if( this.selectedMark.payload.implicator_top === undefined ) {
+        this.selectedMark.payload.implicator_top = mark.top;
+        this.selectedMark.payload.implicator_bottom = mark.bottom;
+        this.selectedMark.payload.implicator_left = mark.left;
+        this.selectedMark.payload.implicator_right = mark.right;
         this.renderSelectedMark();
       } else {
-        this.selectedMark.payload.region = mark;
+        this.selectedMark.payload.region_top = mark.top;
+        this.selectedMark.payload.region_bottom = mark.bottom;
+        this.selectedMark.payload.region_left = mark.left;
+        this.selectedMark.payload.region_right = mark.right;
         this.selectedMark.matched = true;
 
         this.MarkModel.setState(this.selectedMark, null);
@@ -187,109 +180,35 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
 
     let mark = this.selectedMark.payload;
 
-    if( mark.top !== undefined ) {
+    if( mark.implicator_top !== undefined ) {
       var tlIcon = L.divIcon({
         className: 'section-top-left',
         html : '<iron-icon icon="star"></iron-icon>'
       });
-      this.selectedMark.mark = L.marker([this.bounds[1][0] - mark.top, mark.left], {icon: tlIcon}).addTo(this.viewer);
+      this.selectedMark.mark = L.marker([this.bounds[1][0] - mark.implicator_top, mark.implicator_left], {icon: tlIcon}).addTo(this.viewer);
       this.renderedPolygons.push(this.selectedMark.mark);
 
       this.selectedMark.polygon = L.polygon([
-        [this.bounds[1][0] - mark.top, mark.left], 
-        [this.bounds[1][0] - mark.top, mark.right], 
-        [this.bounds[1][0] - mark.bottom, mark.right],
-        [this.bounds[1][0] - mark.bottom, mark.left]
+        [this.bounds[1][0] - mark.implicator_top, mark.implicator_left], 
+        [this.bounds[1][0] - mark.implicator_top, mark.implicator_right], 
+        [this.bounds[1][0] - mark.implicator_bottom, mark.implicator_right],
+        [this.bounds[1][0] - mark.implicator_bottom, mark.implicator_left]
       ],{mark}).addTo(this.viewer);
       this.renderedPolygons.push(this.selectedMark.polygon);
     }
 
-    if( mark.region && mark.region.top !== undefined ) {
+    if( mark.region_top !== undefined ) {
       this.selectedMark.regionPolygon = L.polygon([
-        [this.bounds[1][0] - mark.region.top, mark.region.left], 
-        [this.bounds[1][0] - mark.region.top, mark.region.right], 
-        [this.bounds[1][0] - mark.region.bottom, mark.region.right],
-        [this.bounds[1][0] - mark.region.bottom, mark.region.left]
+        [this.bounds[1][0] - mark.region_top, mark.region_left], 
+        [this.bounds[1][0] - mark.region_top, mark.region_right], 
+        [this.bounds[1][0] - mark.region_bottom, mark.region_right],
+        [this.bounds[1][0] - mark.region_bottom, mark.region_left]
       ],{mark}).addTo(this.viewer);
       this.renderedPolygons.push(this.selectedMark.regionPolygon);
     }
-
-    // mark.polygon.on('click', e => this._onPolygonClicked(e));
-    // mark.region.polygon.on('click', e => this._onPolygonClicked(e));
-
     
   }
 
-  // _onPolygonClicked(e) {
-  //   L.DomEvent.stopPropagation(e);
-  //   L.DomEvent.preventDefault(e);
-
-  //   if( !this.selectedMark ) {
-  //     this._selectPolygon(e.target.options.mark);
-  //     return;
-  //   }
-
-  //   if( !this.selectedMark.section ) {
-  //     this._selectPolygon(e.target.options.mark);
-  //     return;
-  //   }
-
-  //   this.MarkModel.toggleParent(e.target.options.mark, this.selectedMark);
-  // }
-
-  // _selectPolygon(selectedMark) {
-  //   if( this.selectMarkTimer ) {
-  //     clearTimeout(this.selectedMarkTimer);
-  //   }
-
-  //   this.selectMarkTimer = setTimeout(() => {
-  //     this.selectMarkTimer = false;
-  //     this._selectPolygonAsync(selectedMark);
-  //   }, 50);
-  // }
-
-  // _selectPolygon(selectedMark) {
-  //   for( let mark of this.marks ) {
-  //     if( mark === selectedMark ) continue;
-  //     mark.selected = false;
-  //     mark.polygon.setStyle({
-  //       fillColor : '#3388ff',
-  //       color: '#3388ff'
-  //     });
-  //   }
-
-  //   if( selectedMark ) {
-  //     selectedMark.selected = true;
-  //     if( selectedMark.polygon ) {
-  //       selectedMark.polygon.setStyle({
-  //         fillColor : 'red',
-  //         color : 'red'
-  //       });
-
-  //       if( selectedMark.section ) {
-  //         let cll = selectedMark.polygon.getBounds().getCenter();
-
-  //         for( let mark of this.marks ) {
-  //           if( mark.parent_mark_id === selectedMark.mark_id ) {
-  //             mark.polygon.setStyle({color: 'orange', fillColor: 'orange'});
-  //             let polyline = L.polyline(
-  //               [cll, mark.polygon.getBounds().getCenter()], 
-  //               {color: 'red'}
-  //             ).addTo(this.viewer);
-  //             this.connectionLines.push(polyline);
-  //           }
-  //         }
-  //       }
-  //     }
-
-  //     this.AppStateModel.set({selectedMark});
-  //   } else {
-  //     for( let line of this.connectionLines ) {
-  //       this.viewer.removeLayer(line);
-  //     }
-  //     this.connectionLines = [];
-  //   }
-  // }
 
 }
 

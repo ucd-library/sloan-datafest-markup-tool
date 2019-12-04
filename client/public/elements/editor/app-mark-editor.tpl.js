@@ -70,7 +70,7 @@ return html`
 
     <div class="input">
       <app-multi-input 
-        property="type" 
+        property="wine_type" 
         label="Wine Type" 
         type="select" 
         .options="${this.wineTypes}">
@@ -82,7 +82,7 @@ return html`
     </div>
 
     <div class="input">
-      <app-multi-input property="bottlePrice" label="Price Per Bottle" type="number" ></app-multi-input>
+      <app-multi-input property="bottle_price" label="Price Per Bottle" type="number" ></app-multi-input>
     </div>
 
     <div class="input">
@@ -94,11 +94,11 @@ return html`
     </div>
 
     <div class="input">
-      <app-multi-input property="casePrice" label="Price Per Case" type="number" ></app-multi-input>
+      <app-multi-input property="case_price" label="Price Per Case" type="number" ></app-multi-input>
     </div>
 
     <div class="input">
-      <app-multi-input property="bottleSize" label="Bottle Size" type="select" .options="${this.bottleSizes}" ></app-multi-input>
+      <app-multi-input property="bottle_type" label="Bottle Type" type="select" .options="${this.bottleSizes}" ></app-multi-input>
     </div>
   </div>
 

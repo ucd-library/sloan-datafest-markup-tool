@@ -1,4 +1,7 @@
 const app = require('express')();
+const bodyParser = require('body-parser');
+
+app.use(bodyParser.json());
 
 app.use(require('./controllers'));
 require('./controllers/static')(app);

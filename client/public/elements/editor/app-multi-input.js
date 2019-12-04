@@ -30,7 +30,19 @@ export default class AppMultiInput extends Mixin(LitElement)
   }
 
   _onAppStateUpdate(e) {
-    this.selectedPage = e.selectedPage;
+    // on page change, grab current marks
+    if( e.selectedPage !== this.selectedPage ) {
+      this.selectedPage = e.selectedPage;
+
+      let pageMarks = this.MarkModel.getPageMarks(this.selectedPage);
+      let values = [];
+      for( let mid in pageMarks ) {
+        if( pageMarks[mid].payload.type === this.property ) {
+          values.push(pageMarks[mid]);
+        }
+      }
+      this.values = values;
+    }
 
     let localMark = this.values.find(m => m.payload.mark_id === e.selectedMarkId);
 
@@ -97,7 +109,7 @@ export default class AppMultiInput extends Mixin(LitElement)
     if( renderState === 'creating' ) {
       return this.renderInput(index);
     }
-    return html`<span>${item.payload.value}</span>`;
+    return html`<span>${item.payload[item.payload.type]}</span>`;
   }
 
   renderInput(index) {
@@ -118,7 +130,7 @@ export default class AppMultiInput extends Mixin(LitElement)
 
   renderIcon(item, index) {
     let renderState = this.getItemRenderState(item);
-    if( item.payload.region ) {
+    if( item.payload.region_top !== undefined && item.payload.region_top !== null ) {
       return html`<iron-icon icon="star"></iron-icon>`;
     } else if( renderState === 'creating' ) {
       return html`<iron-icon icon="add"></iron-icon>`;
@@ -160,7 +172,7 @@ export default class AppMultiInput extends Mixin(LitElement)
       return this.MarkModel.delete(this.values[index]);
     }
 
-    this.values[index].payload.value = input.value;
+    this.values[index].payload[this.property] = input.value;
 
     this.MarkModel.set(this.values[index]);
     this.MarkModel.setState(this.values[index], 'drawing');
