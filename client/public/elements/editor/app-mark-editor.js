@@ -2,6 +2,7 @@ import { LitElement } from 'lit-element';
 import render from "./app-mark-editor.tpl.js"
 
 import "./app-multi-input"
+import "../app-page-nav"
 
 export default class AppMarkEditor extends Mixin(LitElement)
   .with(LitCorkUtils) {
@@ -32,7 +33,7 @@ export default class AppMarkEditor extends Mixin(LitElement)
     
     this.wineColors = ['red', 'white', 'rosé'];
     this.wineTypes = ['still', 'sparkling', 'fortified'];
-    this.bottleSize = ["Balthazar", "Chopine", "Clavelin", "Demi", "Fifth", "Goliath", "Half Bottle", "Imperial", "Jennie", "Jeroboam", "Litre", "Magnum", "Marie Jeanne", "McKenzie", "Melchior", "Melchizedek", "Methuselah", "Midas", "Nebuchadnezzar", "Piccolo", "Pint", "Pinte", "Pony", "Primat", "Quart", "Quarter", "Quarter Bottle", "Rehoboam", "Salmanazar", "Snipe", "Solomon", "Sovereign", "Split", "Standard", "Tenth", "Tenths"];
+    this.bottleSizes = ["Balthazar", "Chopine", "Clavelin", "Demi", "Fifth", "Goliath", "Half Bottle", "Imperial", "Jennie", "Jeroboam", "Litre", "Magnum", "Marie Jeanne", "McKenzie", "Melchior", "Melchizedek", "Methuselah", "Midas", "Nebuchadnezzar", "Piccolo", "Pint", "Pinte", "Pony", "Primat", "Quart", "Quarter", "Quarter Bottle", "Rehoboam", "Salmanazar", "Snipe", "Solomon", "Sovereign", "Split", "Standard", "Tenth", "Tenths"];
 
     this.isSection = false;
     this.color = '';

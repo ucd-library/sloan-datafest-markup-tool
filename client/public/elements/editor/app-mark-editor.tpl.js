@@ -52,41 +52,64 @@ return html`
     color: #ddd;
     font-size: 12px;
   }
+
+  .layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .btn-layout {
+    display: flex;
+  }
 </style>  
 
-<h2 style="border: none;"><div style="flex:1">Edit Mark</div> <button @click="${this._onDoneClicked}">Done</button></h2>
+<div class="layout">
+  <div style="overflow: auto; flex: 1">
+    <h2 style="border: none;"><div style="flex:1">Mark Sections</div> <button @click="${this._onDoneClicked}">Done</button></h2>
 
-<div class="input">
-  <app-multi-input 
-    property="type" 
-    label="Wine Type" 
-    type="select" 
-    .options="${this.wineTypes}">
-  </app-multi-input>
-</div>
+    <div class="input">
+      <app-multi-input 
+        property="type" 
+        label="Wine Type" 
+        type="select" 
+        .options="${this.wineTypes}">
+      </app-multi-input>
+    </div>
 
-<div class="input">
-  <app-multi-input property="color" label="Wine Color" type="select" .options="${this.wineColors}" ></app-multi-input>
-</div>
+    <div class="input">
+      <app-multi-input property="color" label="Wine Color" type="select" .options="${this.wineColors}" ></app-multi-input>
+    </div>
 
-<div class="input">
-  <app-multi-input property="bottlePrice" label="Price Per Bottle" type="number" ></app-multi-input>
-</div>
+    <div class="input">
+      <app-multi-input property="bottlePrice" label="Price Per Bottle" type="number" ></app-multi-input>
+    </div>
 
-<div class="input">
-  <app-multi-input property="country" label="Country" type="text" ></app-multi-input>
-</div>
+    <div class="input">
+      <app-multi-input property="country" label="Country" type="text" ></app-multi-input>
+    </div>
 
-<div class="input">
-  <app-multi-input property="vintage" label="Vintage" type="number" ></app-multi-input>
-</div>
+    <div class="input">
+      <app-multi-input property="vintage" label="Vintage" type="number" ></app-multi-input>
+    </div>
 
-<div class="input">
-  <app-multi-input property="casePrice" label="Price Per Case" type="number" ></app-multi-input>
-</div>
+    <div class="input">
+      <app-multi-input property="casePrice" label="Price Per Case" type="number" ></app-multi-input>
+    </div>
 
-<div class="input">
-  <app-multi-input property="bottleSize" label="Bottle Size" type="select" .options="${this.bottleSizes}" ></app-multi-input>
+    <div class="input">
+      <app-multi-input property="bottleSize" label="Bottle Size" type="select" .options="${this.bottleSizes}" ></app-multi-input>
+    </div>
+  </div>
+
+  <div class="btn-layout">
+    <div style="flex: 1">
+      <app-page-nav></app-page-nav>
+    </div>
+    <div>
+      <app-page-nav next></app-page-nav>
+    </div>
+  </div>
 </div>
 
 `;}

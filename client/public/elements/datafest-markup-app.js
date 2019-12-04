@@ -3,6 +3,7 @@ import render from "./datafest-markup-app.tpl.js"
 
 import "@ucd-lib/cork-app-utils"
 import "../src"
+import "./styles/style-properties"
 
 import "./app-leaflet-canvas"
 import "./editor/app-mark-editor"

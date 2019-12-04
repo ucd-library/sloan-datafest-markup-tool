@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Datafest Markup Tool</title>
+    <meta name="viewport" content="width=device-width, minimum-scale=1, initial-scale=1">
+
+    <style>
+      html, body {
+        font-family: Arial, Helvetica, sans-serif;
+        padding: 0;
+        margin: 0;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+
+      datafest-markup-app {
+        height: 100vh;
+        width: 100vw;
+      }
+    </style>
+
+    <!-- from spa-router-middleware -->
+    {{bundle}}
+    {{config}}
+  </head>
+  <body>
+    <noscript>
+      Datafest markup tool requires JavaScript to
+      be enabled to view.  You have either disabled JavaScript or your
+      browser does not support it.
+    </noscript>
+    <datafest-markup-app></datafest-markup-app>
+  </body>
+</html>

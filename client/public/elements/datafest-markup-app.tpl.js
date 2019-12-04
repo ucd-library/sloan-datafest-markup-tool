@@ -36,6 +36,22 @@ return html`
   app-mark-editor[open] {
     right: 0;
   }
+
+  @media(max-width: 800px) {
+    app-mark-editor {
+      bottom: -50vh;
+      height: 50vh;
+    }
+
+    app-mark-editor[open] {
+      right: 0;
+      bottom: 0;
+      left: 0;
+      top: auto;
+      width: 100%;
+      box-sizing: border-box;
+    }
+  }
 </style>  
 
 <app-route .app-routes="${this.appRoutes}"></app-route>

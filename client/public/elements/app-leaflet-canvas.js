@@ -2,8 +2,6 @@ import { LitElement } from 'lit-element';
 import render from "./app-leaflet-canvas.tpl.js"
 
 import "leaflet"
-import "./app-page-nav"
-import { resolveUrl } from '@polymer/polymer/lib/utils/resolve-url';
 
 export default class AppLeafletCanvas extends Mixin(LitElement)
   .with(LitCorkUtils) {
@@ -40,20 +38,20 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
     });
     this.viewer.on('click', e => this._onViewerClicked(e));
 
-    L.Control.AppNav = L.Control.extend({
-      onAdd: function(map) {
-        let ele = L.DomUtil.create('app-page-nav');
-        if( this.options.next ) ele.setAttribute('next', 'true');
-        return ele;
-      },
+    // L.Control.AppNav = L.Control.extend({
+    //   onAdd: function(map) {
+    //     let ele = L.DomUtil.create('app-page-nav');
+    //     if( this.options.next ) ele.setAttribute('next', 'true');
+    //     return ele;
+    //   },
   
-      onRemove: function(map) {}
-    });
-    L.control.appNav = function(opts) {
-      return new L.Control.AppNav(opts);
-    }
-    L.control.appNav({ position: 'bottomleft'}).addTo(this.viewer);
-    L.control.appNav({ position: 'bottomright', next: true  }).addTo(this.viewer);
+    //   onRemove: function(map) {}
+    // });
+    // L.control.appNav = function(opts) {
+    //   return new L.Control.AppNav(opts);
+    // }
+    // L.control.appNav({ position: 'bottomleft'}).addTo(this.viewer);
+    // L.control.appNav({ position: 'bottomright', next: true  }).addTo(this.viewer);
   }
 
   _onAppStateUpdate(e) {
@@ -63,6 +61,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
     }
 
     this.selectedMark = e.selectedMark;
+    this.selectedMarkRenderState = e.selectedMarkRenderState;
     this.renderSelectedMark();
 
     if( !e.selectedPage ) return;
@@ -121,7 +120,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
     if( e.originalEvent ) e = e.originalEvent;
 
     if( !this.selectedMark ) return;
-    if( this.selectedMark.renderState !== 'drawing' ) return;
+    if( this.selectedMarkRenderState !== 'drawing' ) return;
 
     let ll = this.viewer.containerPointToLatLng([e.x, e.y]);
 
@@ -184,7 +183,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
     this.clearMarks();
 
     if( !this.selectedMark ) return;
-    if( this.selectedMark.renderState === '' ) return;
+    if( this.selectedMarkRenderState === '' ) return;
 
     let mark = this.selectedMark.payload;
 

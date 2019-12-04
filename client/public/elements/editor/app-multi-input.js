@@ -23,7 +23,7 @@ export default class AppMultiInput extends Mixin(LitElement)
     this.values = [];
     this.options = [];
     this.creating = false;
-    this.open = true;
+    this.open = false;
 
     this._injectModel('AppStateModel', 'MarkModel');
     this.render = render.bind(this);
@@ -31,15 +31,30 @@ export default class AppMultiInput extends Mixin(LitElement)
 
   _onAppStateUpdate(e) {
     this.selectedPage = e.selectedPage;
+
+    let localMark = this.values.find(m => m.payload.mark_id === e.selectedMarkId);
+
+    if( this.creating && !localMark) {
+      this.MarkModel.delete(this.selectedMark);
+    }
+
     this.creating = false;
 
-    if( this.selectedMark === e.selectedMark ) return;
+    if( this.selectedMarkId === e.selectedMarkId && 
+      this.selectedMarkRenderState === e.selectedMarkRenderState ) return;
+
     this.selectedMark = e.selectedMark;
+    this.selectedMarkId = e.selectedMarkId;
+    this.selectedMarkRenderState = e.selectedMarkRenderState;
     
     this.requestUpdate();
 
-    if( !this.values.includes(this.selectedMark) ) return;
-    this.creating = (this.selectedMark.renderState === 'creating');
+    if( !localMark ) return;
+    this.creating = (this.selectedMarkRenderState === 'creating');
+  }
+
+  _onToggleClicked() {
+    this.open = !this.open;
   }
 
   updated() {
@@ -66,12 +81,20 @@ export default class AppMultiInput extends Mixin(LitElement)
     this.values = values;
   }
 
+  getItemRenderState(item) {
+    if( !this.selectedMark ) return 'none';
+    if( item.payload.mark_id !== this.selectedMark.payload.mark_id ) return 'none';
+    return this.selectedMarkRenderState;
+  }
+
   renderSelected(item) {
-    return (item.renderState === 'selected') || (item.renderState === 'drawing');
+    let renderState = this.getItemRenderState(item);
+    return (renderState === 'selected') || (renderState === 'drawing');
   }
 
   renderLabel(item, index) {
-    if( item.renderState === 'creating' ) {
+    let renderState = this.getItemRenderState(item);
+    if( renderState === 'creating' ) {
       return this.renderInput(index);
     }
     return html`<span>${item.payload.value}</span>`;
@@ -94,21 +117,23 @@ export default class AppMultiInput extends Mixin(LitElement)
   }
 
   renderIcon(item, index) {
+    let renderState = this.getItemRenderState(item);
     if( item.payload.region ) {
       return html`<iron-icon icon="star"></iron-icon>`;
-    } else if( item.renderState === 'creating' ) {
+    } else if( renderState === 'creating' ) {
       return html`<iron-icon icon="add"></iron-icon>`;
-    } else if( item.renderState === 'drawing' ) {
+    } else if( renderState === 'drawing' ) {
       return html`<iron-icon icon="create"></iron-icon>`;
     }
     return html`<span class="unmatched" tabindex="1" index="${index}" @click="${this._onUnmatchedClicked}"></span>`;
   }
 
   renderButton(item, index) {
-    if( item.renderState === 'creating' ) {
+    let renderState = this.getItemRenderState(item);
+    if( renderState === 'creating' ) {
       return html`<button @click="${this._onSaveClicked}" index="${index}">Save</button>`;
     }
-    return html`<button @click="${this._onDeleteClicked}" index="${index}">Delete</button>`;
+    return html`<iron-icon @click="${this._onDeleteClicked}" index="${index}" icon="delete-forever"></iron-icon>`;
   }
 
   _onUnmatchedClicked(e) {
@@ -118,7 +143,7 @@ export default class AppMultiInput extends Mixin(LitElement)
 
   _onRowClicked(e) {
     let index = parseInt(e.currentTarget.getAttribute('index'));
-    if( this.values[index].renderState ) return;
+    if( this.values[index] === this.selectedMark && this.selectedMarkRenderState ) return;
     this.MarkModel.setState(this.values[index], 'selected');
   }
 
@@ -130,7 +155,7 @@ export default class AppMultiInput extends Mixin(LitElement)
   _onSaveClicked(e) {
     let index = parseInt(e.currentTarget.getAttribute('index'));
     let input = this.shadowRoot.querySelector(`.input > [index="${index}"]`);
-    
+
     if( !input.value ) {
       return this.MarkModel.delete(this.values[index]);
     }

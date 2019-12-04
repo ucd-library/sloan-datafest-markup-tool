@@ -19,19 +19,16 @@ class MarkModel extends BaseModel {
 
   async setState(mark, state) {
     if( mark.payload ) mark = mark.payload;
-    this.store.data[mark.page_id][mark.mark_id].renderState = state;
 
-    let m;
-    for( let pid in this.store.data ) {
-      for( let mid in this.store.data[pid] ) {
-        m = this.store.data[pid][mid];
-        if( m.payload === mark ) continue;
-        m.renderState = '';
-      }
+    if( state ) {
+      AppStateModel.set({
+        selectedMark: this.store.data[mark.page_id][mark.mark_id],
+        selectedMarkId: mark.mark_id,
+        selectedMarkRenderState: state
+      });
+    } else {
+      AppStateModel.set({selectedMark: null, selectedMarkId: null, selectedMarkRenderState: null});
     }
-
-    if( state ) AppStateModel.set({selectedMark: this.store.data[mark.page_id][mark.mark_id]});
-    else AppStateModel.set({selectedMark: null});
   }
 
   async set(data) {
