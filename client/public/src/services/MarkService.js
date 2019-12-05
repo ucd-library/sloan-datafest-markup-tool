@@ -10,7 +10,6 @@ class MarkService extends BaseService {
 
   set(mark) {
     // don't save yet
-    console.log(mark[mark.type], mark);
     if( !mark[mark.type] ) {
       this.store.setMarkLoaded(mark);
       return;

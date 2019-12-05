@@ -17,7 +17,9 @@
   "dependencies": {
     "@ucd-lib/spa-router-middleware": "^0.1.0",
     "body-parser": "^1.19.0",
+    "cas-authentication": "0.0.8",
     "express": "^4.17.1",
+    "express-session": "^1.17.0",
     "http-proxy": "^1.18.0",
     "jsonwebtoken": "^8.5.1",
     "pg": "^7.13.0",

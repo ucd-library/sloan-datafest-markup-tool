@@ -26,13 +26,16 @@ module.exports = (app) => {
     isRoot : true, // are we serving from host root (/)?
     appRoutes : config.server.appRoutes, // array of root paths.  ie appRoutes = ['foo', 'bar'] to server /foo/* /bar/*
     getConfig : async (req, res, next) => {
+      if( !req.session || !req.session.cas_user) {
+        return res.redirect('/login');
+      }
+
       next({
         appRoutes : config.server.appRoutes,
         damsHost : config.dams.host,
         user : {
-          username: 'alice'
-        },
-        token : jwt.mint('alice')
+          username: req.session.cas_user
+        }
       });
     },
     template : async (req, res, next) => {

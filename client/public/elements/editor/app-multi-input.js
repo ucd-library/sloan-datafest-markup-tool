@@ -149,6 +149,9 @@ export default class AppMultiInput extends Mixin(LitElement)
   }
 
   _onUnmatchedClicked(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
     let index = parseInt(e.currentTarget.getAttribute('index'));
     this.MarkModel.setState(this.values[index], 'drawing');
   }

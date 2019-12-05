@@ -9,6 +9,7 @@ RUN npm install --production
 
 COPY lib lib
 COPY controllers controllers
+COPY models models
 COPY index.js .
 
 COPY client/public/package.json client/public/package.json

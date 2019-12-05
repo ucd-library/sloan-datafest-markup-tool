@@ -1,7 +1,7 @@
 const {BaseModel} = require('@ucd-lib/cork-app-utils');
 const MarkService = require('../services/MarkService');
 const MarkStore = require('../stores/MarkStore');
-const AppStateModel = require('./AppStateModel');
+// const AppStateModel = require('./AppStateModel');
 const uuid = require('uuid');
 
 class MarkModel extends BaseModel {
@@ -15,19 +15,20 @@ class MarkModel extends BaseModel {
     this.userid = APP_CONFIG.user.username;
 
     this.register('MarkModel');
+    this.inject('AppStateModel');
   }
 
   async setState(mark, state) {
     if( mark.payload ) mark = mark.payload;
 
     if( state ) {
-      AppStateModel.set({
+      this.AppStateModel.set({
         selectedMark: this.store.data[mark.page_id][mark.mark_id],
         selectedMarkId: mark.mark_id,
         selectedMarkRenderState: state
       });
     } else {
-      AppStateModel.set({selectedMark: null, selectedMarkId: null, selectedMarkRenderState: null});
+      this.AppStateModel.set({selectedMark: null, selectedMarkId: null, selectedMarkRenderState: null});
     }
   }
 
@@ -37,7 +38,7 @@ class MarkModel extends BaseModel {
     if( loading ) {
       await loading;
     } else {
-      await this.service.getUserPageMarks(pageId, 'alice');
+      await this.service.getUserPageMarks(pageId, APP_CONFIG.user.username);
     }
 
     return this.store.data[pageId] || {};
@@ -60,9 +61,9 @@ class MarkModel extends BaseModel {
     if( mark.payload ) mark = mark.payload;
     await this.service.delete(mark);
 
-    let selectedMark = AppStateModel.store.data.selectedMark;
+    let selectedMark = this.AppStateModel.store.data.selectedMark;
     if( selectedMark && selectedMark.payload === mark ) {
-      AppStateModel.set({selectedMark: null});
+      this.AppStateModel.set({selectedMark: null});
     }
 
     return this.store.data[mark.page_id];

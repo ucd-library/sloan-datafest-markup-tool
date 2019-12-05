@@ -18,32 +18,21 @@ services:
       - PGRST_DB_URI=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pg:5432/postgres
       - PGRST_DB_SCHEMA=datafest
       - PGRST_DB_ANON_ROLE=anon
-    ports:
-      - "3001:3000"
     depends_on:
       - pg
-  
+
   app:
     build: ../..
     ports:
       - "3000:3000"
     environment:
+      - APP_ENV=prod
       - PGUSER=${POSTGRES_USER}
       - PGHOST=pg
       - PGSCHEMA=datafest
       - PGPASSWORD=${POSTGRES_PASSWORD}
       - COOKIE_SECRET=${COOKIE_SECRET}
-    volumes:
-      - ../../lib:/app/lib
-      - ../../controllers:/app/controllers
-      - ../../models:/app/models
-      - ../../index.js:/app/index.js
-      - ../../client/public/elements:/app/client/public/elements
-      - ../../client/public/src:/app/client/public/src
-      - ../../client/public/loader:/app/client/public/loader
-      - ../../client/public/js:/app/client/public/js
-      - ../../client/public/index.html:/app/client/public/index.html
-    command: bash -c "tail -f /dev/null"
+    command: node index.js
 
 volumes:
   pg-storage:

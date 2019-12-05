@@ -21,6 +21,8 @@ export default class AppMarkEditor extends Mixin(LitElement)
       wineColors : {type: Array},
       bottleSizes : {type: Array},
 
+      username : {type : String},
+
       open : {
         type: Boolean,
         reflect : true
@@ -43,6 +45,8 @@ export default class AppMarkEditor extends Mixin(LitElement)
     this.casePrice = '';
     this.bottleType = '';
     this.open = true;
+
+    this.username = APP_CONFIG.user.username;
 
     this.render = render.bind(this);
 

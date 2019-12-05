@@ -140,7 +140,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
       this.drawingPolygon = null;
       this.drawingStart = null;
 
-      if( this.selectedMark.payload.implicator_top === undefined ) {
+      if( this.selectedMark.payload.implicator_top === undefined || this.selectedMark.payload.implicator_top === null ) {
         this.selectedMark.payload.implicator_top = mark.top;
         this.selectedMark.payload.implicator_bottom = mark.bottom;
         this.selectedMark.payload.implicator_left = mark.left;
@@ -180,7 +180,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
 
     let mark = this.selectedMark.payload;
 
-    if( mark.implicator_top !== undefined ) {
+    if( mark.implicator_top !== undefined && mark.implicator_top !== null ) {
       var tlIcon = L.divIcon({
         className: 'section-top-left',
         html : '<iron-icon icon="star"></iron-icon>'
@@ -197,7 +197,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
       this.renderedPolygons.push(this.selectedMark.polygon);
     }
 
-    if( mark.region_top !== undefined ) {
+    if( mark.region_top !== undefined &&  mark.region_top !== null ) {
       this.selectedMark.regionPolygon = L.polygon([
         [this.bounds[1][0] - mark.region_top, mark.region_left], 
         [this.bounds[1][0] - mark.region_top, mark.region_right], 

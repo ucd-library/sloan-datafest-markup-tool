@@ -5,7 +5,7 @@ const sendError = require('../utils/send-error');
 router.post('/', async (req, res) => {
   try {
     let mark = req.body;
-    // TODO set user_id
+    mark.user_id = req.session.cas_user;
 
     res.json(await model.update(mark));
   } catch(e) {
@@ -15,7 +15,7 @@ router.post('/', async (req, res) => {
 
 router.delete('/:markId', async (req, res) => {
   try {
-    res.json(await model.delete(req.params.markId, 'alice'));
+    res.json(await model.delete(req.params.markId, req.session.cas_user));
   } catch(e) {
     sendError(res, e);
   }

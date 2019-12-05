@@ -29,7 +29,14 @@ return html`
     display: flex;
     border-bottom: 1px solid white;
     padding-bottom: 3px;
+    padding-right: 10px;
     align-items: center;
+  }
+
+  h2 a {
+    font-size: 14px;
+    color : var(--app-primary-color);
+    text-decoration: none;
   }
 
   button {
@@ -66,7 +73,10 @@ return html`
 
 <div class="layout">
   <div style="overflow: auto; flex: 1">
-    <h2 style="border: none;"><div style="flex:1">Mark Sections</div> <button @click="${this._onDoneClicked}">Done</button></h2>
+    <h2 style="border: none;">
+      <div style="flex:1">Mark Sections</div>
+      <a href="/logout"><iron-icon icon="exit-to-app" style="vertical-align: bottom"></iron-icon> Logout</a>
+    </h2>
 
     <div class="input">
       <app-multi-input 
@@ -103,9 +113,10 @@ return html`
   </div>
 
   <div class="btn-layout">
-    <div style="flex: 1">
+    <div>
       <app-page-nav></app-page-nav>
     </div>
+    <div style="flex:1; text-align:center">Logged in as: ${this.username}</div>
     <div>
       <app-page-nav next></app-page-nav>
     </div>
