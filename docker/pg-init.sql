@@ -29,6 +29,7 @@ CREATE TABLE mark (
   region_left INTEGER,
   region_bottom INTEGER,
   region_right INTEGER,
+  section_title TEXT,
   wine_type TEXT,
   bottle_type TEXT,
   color TEXT,

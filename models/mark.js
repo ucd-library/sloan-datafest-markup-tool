@@ -10,7 +10,7 @@ class MarkModel {
       'implicator_top', 'implicator_left', 'implicator_bottom', 'implicator_right',  
       'region_top', 'region_left', 'region_bottom', 'region_right',  
       'wine_type', 'bottle_type', 'color', 'vintage', 'country',
-      'bottle_price', 'case_price'];
+      'bottle_price', 'case_price', 'section_title'];
     this.INSERT_SET = this.UPDATE_SET.concat(['mark_id']);
   }
 

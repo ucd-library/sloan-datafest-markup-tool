@@ -40,7 +40,8 @@ export default class AppPageNav extends Mixin(LitElement)
       return;
     }
 
-    this.disabled = (e.history || []).length === 0;
+    let index = (this.history || []).indexOf(this.selectedPage);
+    this.disabled = (index <= 0);
   }
 
   async _onClick() {

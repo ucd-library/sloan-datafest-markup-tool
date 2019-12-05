@@ -11,8 +11,16 @@ return html`
   .layout {
     display: flex;
   }
+
+  iron-icon {
+    cursor: pointer;
+  }
+
+  iron-icon[disabled] {
+    cursor: not-allowed;
+    color: #888;
+  }
 </style>  
 
-
-<iron-icon icon="${this.icon}"></iron-icon>
+<iron-icon icon="${this.icon}" ?disabled="${this.disabled}"></iron-icon>
 `;}

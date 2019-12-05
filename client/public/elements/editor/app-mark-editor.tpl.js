@@ -110,6 +110,10 @@ return html`
     <div class="input">
       <app-multi-input property="bottle_type" label="Bottle Type" type="select" .options="${this.bottleSizes}" ></app-multi-input>
     </div>
+
+    <div class="input">
+      <app-multi-input property="section_title" label="Section Title" type="text" ></app-multi-input>
+    </div>
   </div>
 
   <div class="btn-layout">

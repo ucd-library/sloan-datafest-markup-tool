@@ -52,14 +52,25 @@ class MarkModel extends BaseModel {
     }
     data.user_id = this.userid;
     
-    await this.service.set(data);
+    try {
+      await this.service.set(data);
+    } catch(e) {
+      console.error(e);
+      alert('Failed to save mark :(');
+    }
     
     return this.store.data[data.page_id][data.mark_id];
   }
 
   async delete(mark) {
     if( mark.payload ) mark = mark.payload;
-    await this.service.delete(mark);
+
+    try {
+      await this.service.delete(mark);
+    } catch(e) {
+      console.error(e);
+      alert('Failed to delete mark :(');
+    }
 
     let selectedMark = this.AppStateModel.store.data.selectedMark;
     if( selectedMark && selectedMark.payload === mark ) {
