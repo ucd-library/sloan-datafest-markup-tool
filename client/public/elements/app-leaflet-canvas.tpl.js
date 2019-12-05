@@ -17,9 +17,9 @@ return html`
 
   iron-icon[icon="star"] {
     color: white;
-    background-color: #3e9b96;
+    background-color: var(--app-primary-color);
     border-radius: 16px;
-    margin: -44px 0 0 -12px;
+    margin: -10px 0 0 -10px;
     padding: 5px;
   }
 </style>

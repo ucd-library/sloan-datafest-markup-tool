@@ -115,7 +115,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
       this.drawingStart = ll;
       this.drawingPolygon = L.polygon([
         ll, ll, ll
-      ]).addTo(this.viewer);
+      ], {color: '#18779B'}).addTo(this.viewer);
     } else {
       this.viewer.removeLayer(this.drawingPolygon);
 
@@ -126,7 +126,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
         right : ll.lng
       }
 
-      if( mark.top < mark.bottom ) {
+      if( mark.top > mark.bottom ) {
         let tmp = mark.top
         mark.top = mark.bottom;
         mark.bottom = tmp;
@@ -193,7 +193,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
         [this.bounds[1][0] - mark.implicator_top, mark.implicator_right], 
         [this.bounds[1][0] - mark.implicator_bottom, mark.implicator_right],
         [this.bounds[1][0] - mark.implicator_bottom, mark.implicator_left]
-      ],{mark}).addTo(this.viewer);
+      ],{mark, color: '#18779B'}).addTo(this.viewer);
       this.renderedPolygons.push(this.selectedMark.polygon);
     }
 
@@ -203,7 +203,7 @@ export default class AppLeafletCanvas extends Mixin(LitElement)
         [this.bounds[1][0] - mark.region_top, mark.region_right], 
         [this.bounds[1][0] - mark.region_bottom, mark.region_right],
         [this.bounds[1][0] - mark.region_bottom, mark.region_left]
-      ],{mark}).addTo(this.viewer);
+      ],{mark, color: '#18779B'}).addTo(this.viewer);
       this.renderedPolygons.push(this.selectedMark.regionPolygon);
     }
     
