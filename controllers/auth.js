@@ -10,6 +10,7 @@ let cas = new CASAuthentication({
 router.get('/login', (req, res) => {
   console.log('CAS Service: starting CAS redirection');
 
+  req.session.loginRedirect = req.query.redirect || '/';
 
   cas.bounce(req, res, async () => {
     console.log('CAS Service: CAS redirection complete');
@@ -21,7 +22,7 @@ router.get('/login', (req, res) => {
 
     if( username ) {
       console.log('CAS Service: CAS login success: '+username);
-      res.redirect('/');
+      res.redirect(req.session.loginRedirect || '/');
     } else {
       console.log('CAS Service: CAS login failure');
       res.status(401).send();
