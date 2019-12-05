@@ -27,6 +27,7 @@ services:
       - "3000:3000"
     environment:
       - APP_ENV=prod
+      - SERVER_URL=${SERVER_URL}
       - PGUSER=${POSTGRES_USER}
       - PGHOST=pg
       - PGSCHEMA=datafest
