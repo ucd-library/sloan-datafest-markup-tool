@@ -11,6 +11,8 @@ app.use(session({
   saveUninitialized : true
 }));
 
+app.all(/\/pgr\/.*/, require('./controllers/pgr'));
+
 app.use(bodyParser.json());
 
 app.use(require('./controllers'));
