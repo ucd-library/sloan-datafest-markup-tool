@@ -1,0 +1,214 @@
+#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
+
+** Tesseract
+
+We need to create some good methods for accessing the tesseract data from within
+the postgres database.  We'll use materialized views from our text extraction.
+
+First, let's put all our data into a tesseract schema.
+
+#+BEGIN_SRC sql
+drop schema if exists tesseract;
+create schema tesseract;
+#+END_SRC
+
+#+RESULTS:
+| DROP SCHEMA   |
+|---------------|
+| CREATE SCHEMA |
+
+Then let's create our JSON table, and import our data.
+
+#+BEGIN_SRC sql
+create table tesseract.hocr (
+ark text,
+rotation float,
+hocr jsonb
+);
+#+END_SRC
+
+#+RESULTS:
+| CREATE TABLE |
+|--------------|
+
+#+BEGIN_SRC sql
+COPY tesseract.hocr (ark,rotation,hocr) from 'io/hocr.tsv';
+#+END_SRC
+
+#+RESULTS:
+| COPY 7442 |
+|-----------|
+
+The data in the hocr table is a json format that came from the tesseract hocr
+html, and converted with pup.  It's not convenient :) The following views make
+the data more readily usable.
+
+#+BEGIN_SRC sql
+create materialized view tesseract.pages as
+with c as ( select
+ ark,
+ regexp_split_to_array((regexp_matches(hocr->0->>'title','(bbox([\s\d])+);'))[1],' ') as b,
+ hocr->0 as json
+ from tesseract.hocr
+),
+a as (select ark,json,
+ regexp_split_to_array((regexp_matches(json->>'title','(bbox([\s\d])+)'))[1],' ') as b
+ from c
+)
+select
+ row_number() over () as page_id,
+ ark as page_ark,json->>'id' as page,json,
+ st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
+   st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
+from a;
+#+END_SRC
+
+#+RESULTS:
+| SELECT 7441 |
+|-------------|
+
+#+BEGIN_SRC sql
+  create materialized view tesseract.carea as
+  with c as ( select
+   page_id,page_ark,
+   jsonb_array_elements(json->'children') as json
+   from tesseract.pages
+  ),
+  a as (select *,
+   regexp_split_to_array((regexp_matches(json->>'title','(bbox([\s\d])+)'))[1],' ') as b
+   from c
+  )
+  select
+   row_number() over () as carea_id,
+   page_id,page_ark,json->>'id' as carea,json,
+   st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
+     st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
+  from a;
+#+END_SRC
+
+#+RESULTS:
+| SELECT 473885 |
+|---------------|
+
+#+BEGIN_SRC sql
+create materialized view tesseract.par as
+with c as (select
+ page_id,carea_id,page_ark,
+ jsonb_array_elements(json->'children') as json
+from tesseract.carea
+),
+a as (select *,
+ regexp_split_to_array((regexp_matches(json->>'title','(bbox([\s\d])+)'))[1],' ') as b
+ from c
+)
+select
+row_number() over () as par_id,
+page_id,carea_id,page_ark,json->>'id' as par,
+json,
+st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
+   st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
+from a;
+#+END_SRC
+
+#+RESULTS:
+| SELECT 544980 |
+|---------------|
+
+#+BEGIN_SRC sql
+create materialized view tesseract.line as
+with c as (select
+ page_id,carea_id,par_id,page_ark,
+ jsonb_array_elements(json->'children') as json
+from tesseract.par),
+a as (select *,
+ regexp_split_to_array((regexp_matches(json->>'title','(bbox([\s\d])+)'))[1],' ') as b
+ from c
+)
+select
+ row_number() over () as line_id,
+ page_id,carea_id,par_id,page_ark,json->>'id' as line,
+ (regexp_matches(json->>'title','baseline ((-?[.\d]+) (-?[.\d]+))'))[1] as baseline,
+ json,
+ st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
+   st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
+from a;
+#+END_SRC
+
+#+RESULTS:
+| SELECT 1343776 |
+|----------------|
+
+#+BEGIN_SRC sql :tangle no
+drop function if exists tesseract.ocr_title_parm(in l json,in key text,out v text[]);
+create function tesseract.ocr_title_parm(in l json,in key text,out v text[])
+LANGUAGE SQL AS $$
+   with a as (
+   select regexp_split_to_array(unnest(t),' ') as v
+   from line,regexp_split_to_array($1->>'title','\s*;\s*') as t
+   )
+   select v[2:100] as v from a where v[1]=$2
+$$;
+
+#+END_SRC
+
+#+RESULTS:
+| DROP FUNCTION   |
+|-----------------|
+| CREATE FUNCTION |
+
+#+BEGIN_SRC sql
+create materialized view tesseract.words as
+with c as (
+select
+ page_id,carea_id,par_id,line_id,page_ark,
+ jsonb_array_elements(json->'children') as json
+from tesseract.line
+),
+a as (select *,
+ json->>'text' as text,
+ (regexp_matches(json->>'title','x_wconf (\d+)'))[1] as x_wconf,
+ regexp_split_to_array((regexp_matches(json->>'title','(bbox([\s\d])+)'))[1],' ') as b
+ from c
+)
+select
+ row_number() over () as word_id,
+ page_id,carea_id,par_id,line_id,page_ark,json->>'id' as word,
+ text,
+ x_wconf,
+ json,
+ b[5]::integer-b[3]::integer as height,b[4]::integer-b[2]::integer as length,
+ st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
+   st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
+from a
+where text is not null;
+
+create index words_page_ark on tesseract.words(page_ark);
+create index words_line_id on tesseract.words(line_id);
+
+#+END_SRC
+
+
+#+RESULTS:
+| SELECT 6860455 |
+|----------------|
+
+** Authorization
+
+#+BEGIN_SRC sql
+GRANT USAGE ON SCHEMA tesseract to PUBLIC;
+GRANT SELECT ON ALL TABLES IN SCHEMA tesseract to PUBLIC;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA tesseract to PUBLIC;
+#+END_SRC
+
+#+RESULTS:
+| GRANT |
+|-------|
+| GRANT |
+| GRANT |
+
+
+#+BEGIN_SRC sql :tangle no
+\d
+#+END_SRC
+
+#+RESULTS:

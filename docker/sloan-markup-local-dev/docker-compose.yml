@@ -2,7 +2,7 @@ version: '3'
 
 services:
   pg:
-    image: postgres:10.11
+    build: ../postgres
     ports:
       - 5432:5432
     environment:
@@ -10,7 +10,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
     volumes:
       - pg-storage:/var/lib/postgresql/data/
-      - ../pg-init.sql:/docker-entrypoint-initdb.d/pg-init.sql
+      # - ../pg-init.sql:/docker-entrypoint-initdb.d/pg-init.sql
 
   pgr:
     image: postgrest/postgrest

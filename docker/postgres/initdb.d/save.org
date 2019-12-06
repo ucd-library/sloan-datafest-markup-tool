@@ -1,0 +1,2682 @@
+#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=sloan" :tangle yes
+* Crosswalk
+
+There are three different nameing schemes for the files, the original filename
+with their numbering scheme, the catalog/page_id from the current PTV
+application, and the arks from the DAMS. The way that these were joined together
+is torturous.
+
+I have created our best guess at this crosswalk. Rather than trying to keep any
+of the other tables joining these, I will use this table as the final aribitor
+of this xwalk. Part of the reason for that, is that with Eric's changes, we have
+some new arks, from catalogs that were separated.
+
+#+BEGIN_SRC psql
+\COPY (select coalesce(j.file,p.file) as file,coalesce(j.catalog_id,p.catalog_id) as catalog_id,j.ark,coalesce(j.page,p.page) as page,p.page_id from page_xwalk p full outer join jwalk j using (file,catalog_id) order by 1,2,j.page) to xwalk.csv with csv header
+#+END_SRC
+
+* Rotation
+
+When extracting images that have some distortation based on a input rotation
+error, you can some pretty significant changes to your OCR.
+
+** How much rotation
+
+The following command generates a histograom that shows how much rotation we
+think we are seeing in our images.  This is based on looking for columns of
+numbers as described below.  This histogram is on tenths of a degree.  You can
+see that about half of the images are affected by some rotation, as estimated by
+our method.
+
+#+BEGIN_SRC sql
+create view rotation_histogram as
+with a as (
+ select (CASE when (rotation > 180) THEN rotation-360 ELSE rotation END)::decimal(6,1) as rotation
+from (
+ select ark,max(rotation) as rotation
+ from rotation_deltas group by 1) as r
+)
+select
+rotation,
+count(*)
+from a
+group by 1 order by 1;
+#+END_SRC
+
+#+BEGIN_SRC sql
+  select * from rotation_histogram;
+#+END_SRC
+
+#+PLOT: labels:("Rotation" "Count") ind:1
+#+RESULTS:
+| rotation | count |
+|----------+-------|
+|     -2.4 |     1 |
+|     -2.2 |     1 |
+|     -2.1 |     1 |
+|     -2.0 |     1 |
+|     -1.8 |     1 |
+|     -1.7 |     2 |
+|     -1.6 |     3 |
+|     -1.5 |     4 |
+|     -1.4 |     9 |
+|     -1.3 |    11 |
+|     -1.2 |    15 |
+|     -1.1 |    18 |
+|     -1.0 |    25 |
+|     -0.9 |    33 |
+|     -0.8 |    33 |
+|     -0.7 |    45 |
+|     -0.6 |    60 |
+|     -0.5 |    52 |
+|     -0.4 |    97 |
+|     -0.3 |   118 |
+|     -0.2 |    85 |
+|     -0.1 |   123 |
+|      0.0 |  2371 |
+|      0.1 |    87 |
+|      0.2 |    94 |
+|      0.3 |   110 |
+|      0.4 |    87 |
+|      0.5 |    64 |
+|      0.6 |    83 |
+|      0.7 |    62 |
+|      0.8 |    50 |
+|      0.9 |    45 |
+|      1.0 |    25 |
+|      1.1 |    17 |
+|      1.2 |    20 |
+|      1.3 |    14 |
+|      1.4 |     7 |
+|      1.5 |     9 |
+|      1.6 |     6 |
+|      1.7 |     5 |
+|      1.8 |     3 |
+|      1.9 |     1 |
+|      2.0 |     4 |
+|      2.1 |     2 |
+|      2.3 |     1 |
+
+The average rotation is pretty small, only about 0.209 degrees
+
+#+BEGIN_SRC sql
+select (sum(abs(rotation)*count)/sum(count))::decimal(6,3) as average_rotation
+from rotation_histogram;
+#+END_SRC
+
+#+RESULTS:
+| average_rotation |
+|------------------|
+|            0.209 |
+
+For any image, you can see what kind difference this makes using the iiif
+service in the dams.  For example, lets look for some example images that are
+right around that average rotation.  We'll pick some images that are close to
+that rotation parameter, in both clockwise and counter-clockwise direction.
+
+#+BEGIN_SRC sql
+with a as (
+ select sum(abs(rotation)*count)/sum(count) as r
+ from rotation_histogram
+),
+m as (
+ select ark,r,rotation,abs(rotation-r)
+ from a,rotation_deltas
+ order by 4 limit 2
+),
+x as (
+ select ark,r,rotation,abs(rotation-(360-r))
+ from a,rotation_deltas
+ order by 4 limit 2
+)
+select * from m union select * from x;
+#+END_SRC
+
+#+RESULTS:
+| ark        |                      r | rotation |                  abs |
+|------------+------------------------+----------+----------------------|
+| d7jc7h-013 | 0.20937259923175416133 |     0.21 | 0.000627400768245828 |
+| d77c7q-071 | 0.20937259923175416133 |   359.79 | 0.000627400768223652 |
+| d7dk5k-008 | 0.20937259923175416133 |   359.79 | 0.000627400768223652 |
+| d7v88n-001 | 0.20937259923175416133 |     0.21 | 0.000627400768245828 |
+
+[[https://digital.ucdavis.edu/fcrepo/rest/collection/sherry-lehmann/catalogs/d7jc7h/media/images/d7jc7h-013/svc:iiif/full/full/0/default.jpg][unrotated]]
+[[https://digital.ucdavis.edu/fcrepo/rest/collection/sherry-lehmann/catalogs/d7jc7h/media/images/d7jc7h-013/svc:iiif/full/full/0.21/default.jpg][rotated]]
+
+
+** How does rotation affect the text extration
+
+#+BEGIN_SRC sql
+create materialized view word_intersection as
+with r as (
+ select w.* from words w
+ join (select ark from rotation_deltas where rotation !=0) as a
+ using (ark)
+),
+i as (
+ select r0,r1,
+ st_intersection(r0.bbox,r1.bbox) as intersection
+ from r r0
+ join r r1 on (r0.rotation=0 and r1.rotation != 0 and r0.ark=r1.ark and st_intersects(r0.bbox,r1.bbox) is true)
+),
+c as (
+ select
+ (r0).ark,
+ (r1).rotation,
+ (r0).text as r0_text,
+ (r1).text as r1_text,
+ (st_area(intersection)/st_area((r0).bbox))::decimal(6,2) as r0_fraction,
+ (st_area(intersection)/st_area((r1).bbox))::decimal(6,2) as r1_fraction,
+ (r0).word_id as r0_id,
+ (r1).word_id as r1_id
+ from i
+)
+select *
+from c
+where r0_fraction>0.1 and r1_fraction>0.1;
+#+END_SRC
+
+#+RESULTS:
+| SELECT 1010706 |
+|----------------|
+
+**** Same word Levinstein Distance
+
+If we define same words as a significant overlap, we can see how far off the
+words are by average, when we have rotations.  We will pick a few definitions of
+the notion of "same word" Basically, that they have some % of overlap.
+
+#+BEGIN_SRC sql
+with f as (
+ select * from (VALUES (.8),(0.85),(0.9),(0.95)) as v(frac)
+)
+select
+frac,count(*)
+from f,word_intersection
+where r0_fraction > f.frac and r1_fraction > f.frac
+group by frac order by frac;
+#+END_SRC
+
+#+RESULTS:
+| frac |  count |
+|------+--------|
+|  0.8 | 847943 |
+| 0.85 | 831829 |
+|  0.9 | 808228 |
+| 0.95 | 688630 |
+
+
+Then we can calculate the average levenshtein distance from the words for each
+rotation angle.
+
+#+BEGIN_SRC sql
+create or replace view same_word_lev as
+with f as (
+ select * from (VALUES (.8),(0.85),(0.9),(0.95)) as v(frac)
+),
+s as (
+ select
+ frac,(CASE WHEN (rotation>180) THEN rotation-360 ELSE rotation END)::decimal(6,1),r0_id,r0_text,r1_id,r1_text
+ from f,word_intersection
+ where r0_fraction > f.frac and r1_fraction > f.frac
+)
+select frac,rotation,
+(avg(levenshtein(r0_text,r1_text)))::decimal(6,2) as d
+from s
+group by 1,2
+order by 1,2
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+And we can create a nice cross tab of this data for copying into CSV
+
+#+BEGIN_SRC sql
+create view same_word_lev_ct as
+select * from
+crosstab('select rotation,frac,d From same_word_lev order by rotation,frac',
+         'select distinct frac from same_word_lev order by 1')
+as ct(
+rotation decimal(6,2),s80 decimal(6,2),s85 decimal(6,2),s90 decimal(6,2),s95 decimal(6,2));
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+#+BEGIN_SRC sql
+\COPY (select * from same_word_lev_ct) to io/same_word_lev_ct.csv with csv header
+#+END_SRC
+
+#+RESULTS:
+| COPY 45 |
+|---------|
+
+
+**** Word Similarity
+
+One thing we can count is similar the words are from one rotation to the next.
+One way to do this is to count how many words are found for each page, at each
+rotation, and then how many of these are the same_word.
+
+We can use the above defintions of same_word, then we jsut need to count the
+words.
+
+#+BEGIN_SRC sql
+create view rotation_word_similarity as
+with r as (
+ select ark,
+ (CASE WHEN (rotation > 180) THEN rotation-360 ELSE rotation END)::decimal(6,1) as rotation
+ from rotation_deltas
+where rotation !=0
+),
+r0 as (select
+ark,count(*)
+from words w join r using (ark)
+where w.rotation=0
+group by ark
+),
+r1 as (select
+ark,
+count(*)
+from words w join r using (ark) where w.rotation!=0
+group by ark
+),
+rot as (
+ select ark,r0.count as r0,r1.count as r1
+ from r0 join r1 using (ark)
+),
+a as (
+ select rotation,sum(r0) as r0,sum(r1) as r1
+ from rot join r using (ark)
+ group by rotation
+ order by rotation
+),
+s as (
+ select
+ (CASE WHEN (rotation > 180) THEN rotation-360 ELSE rotation END)::decimal(6,1) as rotation,
+ count(*) as same
+ from word_intersection where r0_fraction > 0.85 and r1_fraction > 0.85
+ group by 1
+)
+select rotation,r0,r1,same
+from a join s using (rotation)
+order by rotation
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+#+BEGIN_SRC sql
+\COPY (select * from rotation_word_similarity) to csv/rotation_word_similarity.csv with csv header
+#+END_SRC
+
+#+RESULTS:
+| COPY 45 |
+|---------|
+
+* Image Manipulation / Text Manipulation
+** Image Outlines
+
+Justin identified this potential helper documents on the Hough Filter,
+https://www.imagemagick.org/discourse-server/viewtopic.php?t=25476
+
+However, we really need to do a better job of getting the outline of the images.
+My amerine menu script might be a good starting point. Searching for background
+removal in imagemagick brings up some interesting stuff as well.
+
+
+** Tesseract
+
+I am running tesseract over all the current images as a first pass for ocr. I'm
+hoping to be able to parse the html format and pull out all the rectangles that
+I'll need.
+
+#+BEGIN_SRC bash
+for i in $(find .. -name \*.jpg ); do n=$(basename $i .jpg); echo $n; tesseract
+$i $n -l eng --psm 1 --oem 1 txt hocr; done
+#+END_SRC
+
+It seem's that it will be easier to import JSON, rather than html.  I'll use pup
+to convert to a simple json format.  This includes the filename, so I can import
+easily with
+
+#+BEGIN_SRC bash
+	rm hocr.json;
+	for i in $(find ~/sherry-lehmann/sherry-lehmann -name \*.hocr ); do
+	if [[ -s $i ]]; then
+	 ark=$(basename $i .hocr);
+	 echo $ark;
+	 echo -n -e "$ark\t0\t" >> hocr.json;
+	 pup 'div.ocr_page json{}' < $i | jq -c . | sed -e 's/\\/\\\\/g' >> hocr.json;
+	fi;
+	done
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC bash
+  eng=jane
+  j=hocr_${eng}.json
+  rm $j
+  for i in $(find io/sloan-ocr -name \*_${eng}.hocr); do
+  if [[ -s $i ]]; then
+   ark=$(basename $(dirname $i) _{eng}.hocr);
+   #echo $ark;
+   echo -n -e "$ark\t0\t" >> $j;
+   pup 'div.ocr_page json{}' < $i | jq -c . | sed -e 's/\\/\\\\/g' >> $j;
+  fi;
+  done
+  wc -l $j
+#+END_SRC
+
+#+RESULTS:
+: 7442 hocr_jane.json
+
+Now that we have all the hocr in the database as JSON, we can start to look at
+the words and lines that are in there.  Remember, we did NOT use any color
+thresholding on these data yet.  The f_bbox.sql component of the init.db for the
+postgres image has this information in it.
+
+#+BEGIN_SRC sql
+\set s eng_jane
+--truncate :s.hocr;
+--\COPY :s.hocr from hocr_jane.json
+refresh materialized view :s.carea;
+refresh materialized view :s.par;
+refresh materialized view :s.line;
+refresh materialized view :s.words;
+#+END_SRC
+
+#+RESULTS:
+
+** Get the original marks.
+*** Needed the original sizes of the images
+
+Argh, I need the size of the images to do the maths.
+#+BEGIN_SRC
+for i in $(find ark_87287/* -name \*.jpg); do
+ b=`basename $i .jpg'; s=$(jpeginfo --quiet $i | cut -d' ' -f 2,4 | tr ' ' ,);
+ echo X,$b,$s;
+done > size.csv
+
+for i in $(find ark_87287/* -name \*.png); do
+ b=`basename $i .png`;
+ echo -n "L,$b"; pnginfo $i | grep 'Image Width' | sed -e 's/\s*Image [^0-9]*://g' | tr ' ' ,;
+done >> size.csv
+
+#+END_SRC
+
+#+BEGIN_SRC sql
+create table image_size (size char,page_ark text,x integer,y integer);
+\COPY image_size from io/size.csv with csv;
+
+create table image_extent as
+select l.page_ark,
+ARRAY[l.x,l.y]::integer[2] as pdf,
+ARRAY[x.x,x.y]::integer[2] as image
+from image_size l
+join image_size x
+on (l.size='L' and x.size='X' and l.page_ark=x.page_ark);
+#+END_SRC
+
+#+RESULTS:
+| CREATE TABLE |
+|--------------|
+| COPY 7628    |
+| SELECT 3723  |
+
+In addition, I will make a new CSV file that includes the image sizes, for a
+verification with Jane.
+
+#+BEGIN_SRC sql
+\COPY (select file,page_ark,x,y from ark_xref left join image_size on (ark=page_ark) where size='X' order by file) to image_size.csv with csv header
+#+END_SRC
+
+#+RESULTS:
+| COPY 3886 |
+|-----------|
+
+#+BEGIN_SRC
+with a as (select page_id,count(*) from marks group by 1 order by 1) select
+format('%s-%s',regexp_replace(ark,'ark:/','ark_'),lpad(page::text,3,'0')) as
+page from a join pages using (page_id) join jwalk using (catalog_id,page) order
+by page;
+#+END_SRC
+
+This is an example to start each in gimp
+#+BEGIN_SRC
+i=d78g6p-022; n=${i%-*}; gimp $n/media/images/$i.jpg $n/media/page_images/$i.png
+#+END_SRC
+
+#+BEGIN_SRC sql
+create table mark_xwalk (
+page_ark text,
+big_ll integer[2],
+big_ur integer[2],
+lit_ll integer[2],
+lit_ur integer[2]
+);
+#+END_SRC
+
+#+RESULTS:
+| CREATE TABLE |
+|--------------|
+
+
+#+BEGIN_SRC sql
+copy mark_xwalk from stdin with csv header;
+page_ark,big_ll,big_ur,little_ll,little_ur
+d7001g-003,"{180,5433}","{3765,776}","{139,1357}","{1030,193}"
+d70597-003,"{174,5421}","{3651,465}","{136,1365}","{1023,139}"
+d70597-012,"{144,5478}","{3642,582}","{129,1371}","{1004,146}"
+d70597-030,"{309,5508}","{3819,615}","{170,1339}","{1046,174}"
+d7101s-025,"{171,5358}","{3669,627}","{132,1346}","{1008,156}"
+d7101s-026,"{148,5372}","{3704,716}","{125,1343}","{1017,177}"
+d71s3g-005,"{40,5371}","{3664,744}","{99,1342}","{1008,187}"
+d72013-004,"{208,5480}","{3760,624}","{75,1482}","{1110,44}"
+d72013-005,"{80,5480}","{3728,692}","{27,1480}","{1105,70}"
+d72013-006,"{208,5544}","{3672,648}","{63,1495}","{1093,57}"
+d72013-007,"{165,5472}","{3806,660}","{62,1483}","{1123,55}"
+d72013-008,"{224,5552}","{3680,648}","{81,1492}","{1095,59}"
+d72013-009,"{160,5464}","{3808,704}","{55,1483}","{1125,64}"
+d72013-016,"{264,5520}","{3840,672}","{78,1486}","{1138,64}"
+d72s3s-001,"{165,5265}","{3695,519}","{134,1362}","{1044,132}"
+d72s3s-002,"{176,5328}","{3856,568}","{136,1329}","{1054,143}"
+d7388t-003,"{796,3632}","{2840,184}","{194,1011}","{681,180}"
+d7388t-004,"{772,3616}","{5128,196}","{183,1006}","{1233,181}"
+d7388t-005,"{760,3624}","{5120,184}","{186,1011}","{1233,181}"
+d7388t-006,"{768,3632}","{5104,184}","{187,1010}","{1230,181}"
+d7388t-007,"{768,3624}","{5112,200}","{187,1010}","{1233,186}"
+d73s33-006,"{272,5696}","{3976,672}","{162,1429}","{1087,168}"
+d73w2r-001,"{144,5336}","{3648,624}","{129,1333}","{999,153}"
+d73w2r-002,"{112,5208}","{3688,592}","{115,1303}","{1015,145}"
+d73w2r-003,"{256,5344}","{3640,624}","{156,1344}","{1005,155}"
+d73w2r-004,"{104,5216}","{3690,572}","{117,1299}","{1012,147}"
+d73w2r-005,"{144,5320}","{3641,611}","{132,1332}","{1005,151}"
+d73w2r-006,"{104,5208}","{3688,576}","{118,1303}","{1011,142}"
+d73w2r-007,"{152,5328}","{3648,616}","{130,1330}","{1006,153}"
+d73w2r-008,"{96,5216}","{3688,592}","{120,1303}","{1012,144}"
+d73w2r-013,"{152,5336}","{3592,600}","{129,1335}","{988,151}"
+d74s3d-003,"{248,5584}","{3952,552}","{154,1396}","{1077,138}"
+d75k5d-006,"{120,5144}","{3824,584}","{123,1287}","{1048,147}"
+d75p42-001,"{272,5256}","{3848,576}","{160,1311}","{1053,147}"
+d75p42-003,"{272,5248}","{3848,592}","{163,1311}","{1054,142}"
+d76k5q-008,"{208,5368}","{3720,616}","{145,1344}","{1024,157}"
+d76p4c-017,"{208,5528}","{3792,768}","{145,1383}","{1039,193}"
+d76p4c-019,"{208,5528}","{3792,776}","{141,1381}","{1041,192}"
+d77p4p-013,"{440,3894}","{5335,187}","{102,1080}","{1286,184}"
+d78g6p-022,"{360,4920}","{3824,248}","{184,1255}","{1045,60}"
+d7988p-009,"{224,5448}","{3848,776}","{150,1368}","{1056,190}"
+d79w2m-004,"{168,5432}","{3928,672}","{59,1474}","{1155,64}"
+d79w2m-008,"{232,5456}","{3912,656}","{73,1476}","{1161,60}"
+d79w2m-009,"{184,5390}","{3921,638}","{67,1470}","{1162,51}"
+d79w2m-013,"{136,5432}","{3834,648}","{43,1471}","{1140,49}"
+d79w2m-014,"{40,5368}","{3800,687}","{13,1456}","{1128,67}"
+d79w2m-023,"{192,5432}","{3848,624}","{58,1471}","{1150,54}"
+d79w2m-025,"{80,5360}","{3864,624}","{42,1473}","{1140,54}"
+d79w2m-026,"{120,5384}","{3880,672}","{58,1475}","{1150,64}"
+d79w2m-029,"{120,5400}","{3824,608}","{38,1461}","{1129,43}"
+d79w2m-030,"{216,5392}","{3936,616}","{69,1459}","{1164,51}"
+d79w2m-034,"{160,5384}","{3904,656}","{54,1456}","{1152,51}"
+d79w2m-037,"{112,5400}","{3856,608}","{37,1461}","{1140,43}"
+d79w2m-038,"{72,5352}","{3784,576}","{28,1446}","{1126,36}"
+d7b01k-001,"{616,3768}","{5184,200}","{1,1171}","{1402,61}"
+d7b880-008,"{96,5872}","{3808,336}","{117,1467}","{1044,85}"
+d7bc7n-029,"{0,5696}","{3776,672}","{94,1426}","{1033,163}"
+d7c889-012,"{216,5488}","{3824,496}","{145,1371}","{1048,123}"
+d7d59z-007,"{0,5808}","{3992,248}","{93,1456}","{1084,60}"
+d7ds3w-012,"{272,5160}","{3832,576}","{159,1288}","{1050,145}"
+d7f598-021,"{288,5440}","{3872,744}","{165,1359}","{1057,183}"
+d7g01t-007,"{160,5448}","{3760,736}","{127,1360}","{1038,177}"
+d7g01t-025,"{168,5448}","{3760,712}","{133,1363}","{1033,180}"
+d7g59k-003,"{184,4912}","{3840,728}","{136,1228}","{1050,181}"
+d7g59k-004,"{264,5160}","{3872,920}","{156,1297}","{1063,229}"
+d7h014-001,"{536,3896}","{5544,104}","{129,1074}","{1332,163}"
+d7h014-013,"{644,3852}","{5504,112}","{151,1063}","{1324,163}"
+d7h014-014,"{648,3856}","{5472,96}","{157,1065}","{1321,166}"
+d7h59w-003,"{176,5472}","{3704,744}","{135,1365}","{1024,198}"
+d7h59w-017,"{168,5472}","{3696,712}","{135,1369}","{1018,183}"
+d7j01f-007,"{168,5784}","{3800,80}","{130,1446}","{1036,21}"
+d7j01f-021,"{192,5760}","{3856,80}","{139,1441}","{1054,16}"
+d7js34-025,"{200,5440}","{3712,744}","{144,1362}","{1017,184}"
+d7js34-026,"{368,5264}","{3848,560}","{187,1315}","{1060,141}"
+d7k01r-001,"{104,5344}","{3664,664}","{117,1333}","{1000,165}"
+d7kw23-008,"{256,5336}","{3723,808}","{151,1335}","{1018,201}"
+d7kw23-009,"{312,5360}","{3704,784}","{181,1344}","{1018,192}"
+d7kw23-010,"{224,5344}","{3712,808}","{142,1336}","{1026,199}"
+d7ms3r-029,"{304,5336}","{3728,632}","{165,1333}","{1030,159}"
+d7ms3r-030,"{152,5280}","{3696,648}","{132,1326}","{1014,166}"
+d7mw2d-002,"{384,3960}","{5512,112}","{90,1092}","{1327,163}"
+d7mw2d-003,"{376,3944}","{5528,120}","{87,1087}","{1329,166}"
+d7nk5r-002,"{272,5576}","{3768,608}","{160,1398}","{1039,156}"
+d7pk52-003,"{232,5392}","{3704,400}","{156,1356}","{1015,100}"
+d7pp4q-011,"{176,5288}","{3696,512}","{136,1326}","{1017,132}"
+d7pp4q-023,"{184,5296}","{3760,520}","{133,1329}","{1027,129}"
+d7ps3c-002,"{224,5768}","{3704,568}","{147,1447}","{1054,171}"
+d7ps3c-006,"{152,5720}","{3680,592}","{126,1431}","{1020,150}"
+d7qp41-006,"{184,5264}","{3656,744}","{136,1317}","{1006,190}"
+d7qp41-014,"{368,5360}","{3800,840}","{184,1344}","{1044,205}"
+d7qs3p-005,"{128,5392}","{3832,728}","{120,1347}","{1047,177}"
+d7s881-005,"{72,5520}","{3688,784}","{115,1383}","{1032,208}"
+d7sg6b-004,"{104,5248}","{3736,576}","{117,1311}","{1026,147}"
+d7sg6b-014,"{128,5232}","{3736,584}","{126,1314}","{1023,151}"
+d7tg6n-004,"{128,5272}","{3806,599}","{121,1320}","{1047,150}"
+d7v88n-004,"{176,5488}","{3936,688}","{55,1492}","{1167,67}"
+d7vc79-003,"{392,5280}","{3864,760}","{187,1323}","{1053,190}"
+d7vc79-007,"{392,5280}","{3840,768}","{187,1327}","{1051,192}"
+d7vc79-026,"{304,5192}","{3616,632}","{165,1305}","{993,156}"
+d7vc79-028,"{304,5200}","{3560,648}","{165,1306}","{985,160}"
+d7w88z-016,"{248,5312}","{3856,648}","{154,1327}","{1056,162}"
+d7ws37-000,"{416,5968}","{3648,224}","{193,1495}","{1009,55}"
+d7ws37-004,"{384,5992}","{3600,272}","{184,1492}","{990,69}"
+d7x30h-016,"{272,5248}","{3848,592}","{160,1309}","{1050,150}"
+d7z30t-008,"{96,5424}","{3760,592}","{30,1465}","{1116,39}"
+#+END_SRC
+
+#+RESULTS:
+| COPY 105 |
+|----------|
+
+#+BEGIN_SRC sql
+create table crowd_source as
+with
+p as (
+select
+page_id,file,
+format('%s-%s',regexp_replace(ark,'ark:/87287/',''),lpad(page::text,3,'0')) as page_ark
+from ptv_pages join jwalk using (catalog_id,page)
+)
+select
+file,page_ark,
+xy as pdf_xy,
+type,wine_type,color,county as country,name,section,vintage,bottle_type,perprice,caseprice,
+ARRAY[(((big_ur[1]-big_ll[1])::float/(lit_ur[1]-lit_ll[1]))*(xy[1]-lit_ll[1]) + big_ll[1])::integer,
+ (((big_ur[2]-big_ll[2])::float/(lit_ur[2]-lit_ll[2]))*(xy[2]-(e.pdf[2]-lit_ll[2])) + (e.image[2] - big_ll[2]))::integer
+]::integer[2] as xy
+from marks left join
+p using (page_id) left join
+mark_xwalk using (page_ark)
+left join image_extent e using (page_ark)
+order by file,xy[2];
+
+alter table crowd_source add column mark_id serial primary key;
+alter table crowd_source add column pt geometry(POINT,32662);
+update crowd_source set pt=st_setsrid(st_makepoint(xy[1],-xy[2]),32662);
+
+#+END_SRC
+
+#+RESULTS:
+| SELECT 1343 |
+|-------------|
+| ALTER TABLE |
+| ALTER TABLE |
+| UPDATE 1343 |
+
+#+BEGIN_SRC
+ \COPY (select file,page_ark,type,wine_type,color,country,name,section,vintage,bottle_type,perprice,caseprice,st_x(pt),-st_y(pt) from crowd_source order by file,(st_x(pt)/200)::integer,st_y(pt) desc) to crowd_source with csv header;
+
+#+END_SRC
+
+* Price Finding Functions
+
+This query finds potential prices
+
+#+BEGIN_SRC sql
+drop view if exists prices cascade;
+create view prices as
+with a as (
+ select *,
+ st_makepoint(st_xmax(bbox),0) as rhs_0
+ from words where text~'^\d\d*\.\d\d$'
+)
+select * from a;
+#+END_SRC
+
+#+RESULTS:
+| DROP VIEW   |
+|-------------|
+| CREATE VIEW |
+
+#+BEGIN_SRC sql
+select ark,line_id,count(*)
+from a
+group by 1,2
+order by 3 desc;
+#+END_SRC
+
+This query trys to find non-price numbers that aren't vintages.  The idea here
+is that these have identifiers in them.
+
+#+BEGIN_SRC sql
+drop view if exists identifiers cascade;
+create view identifiers as
+with a as (
+ select ark, word_id,text,bbox,
+ st_makepoint(st_xmin(bbox),0) as lhs_0
+ from words
+ where text~'^\d\d\d+$' and not text ~ '^19..')
+select * from a;
+#+END_SRC
+
+#+RESULTS:
+| SET         |
+|-------------|
+| DROP VIEW   |
+| CREATE VIEW |
+
+This function looks at organizing the prices into columns.  This is done by
+clustering the prices on their x axis, and then finding the best line with the
+RHS to the values within the prices.  We can use this to calculate our rotations
+in the next step.
+
+#+BEGIN_SRC sql
+  create or replace view price_cols as
+  with a as (
+    select ark,text,st_ymin(bbox) as y,st_x(rhs_0) as x,
+    ST_ClusterDBSCAN(rhs_0, eps := 50, minpoints:=6)
+    over (partition by ark) as col
+    from prices
+  )
+  select ark,col,
+  array_agg(text order by y) as text,
+  array_agg(x order by y) as x    ,
+  array_agg(y order by y) as y
+  from a group by ark,col
+#+END_SRC
+
+#+RESULTS:
+| SET         |
+|-------------|
+| CREATE VIEW |
+
+*** Word Tokens
+
+We are going to try and extend this idea of extracting prices into a more
+general idea.  In this case, we are going to create a more simple symbol set for
+each of our words.  The basic idea is to simplify our regexp searches on lines.
+
+#+BEGIN_SRC sql
+
+WHEN (w.text~'^\d\d*\.\d\d$') THEN
+'P'
+WHEN (w.text~'^(\d\d*\.)((\d[^\d])|([^\d]\d))$') THEN
+'Q'
+WHEN (w.text ~'^19\d\d$') THEN
+'Y'
+WHEN (w.text ~'^\d\d\d+$') THEN
+'C'
+WHEN (w.text ~'^[.]+$') THEN
+'.'
+ELSE
+'N'
+END)::char
+$$ LANGUAGE SQL IMMUTABLE;
+
+create or replace function
+word_token( IN w words, IN z int,OUT char) as $$
+select
+(CASE WHEN (w.height::float/z::float < 0.2) THEN
+'_'
+WHEN (w.height::float/z < 0.8 ) THEN
+lower(word_token(w))
+ELSE
+word_token(w)
+END)::char;
+$$ LANGUAGE SQL IMMUTABLE;
+
+select text,word_token(w),word_token(w,(w.height*1.1)::integer) from words w where word_token(w) in ('Q') limit 3;
+#+END_SRC
+
+#+RESULTS:
+| CREATE FUNCTION |            |            |
+|-----------------+------------+------------|
+| CREATE FUNCTION |            |            |
+| text            | word_token | word_token |
+| 2.2.            | Q          | Q          |
+| 22.6.           | Q          | Q          |
+| 23.4,           | Q          | Q          |
+
+That's not perfect, but we are getting somewhere, let's see what sort of line
+tokens we have with this symbol set.
+
+
+#+BEGIN_SRC sql
+ with d as (
+   select ark,text,
+   regexp_replace(regexp_replace(text,'[\(\)]','','g'),'^\$','') as n$,
+--   regexp_replace(text,'[\(\)]','','g') as n$,
+--   regexp_replace(text,'^\$','') as n$,
+   regexp_replace(text,'[^\d\.]','','g') as digits
+ from words),
+ s as (
+  select * from d
+  where (length(n$)-length(digits)>1)
+  and (length(n$)-length(digits) <3)
+  and (length(n$)>3) and (text~'\.\d')
+)
+select * from s where ark='d7fw2v-024' limit 10
+--select * from s where ark='d77g6c-004' limit 10
+--select ark,count(*) from s group by ark order by count desc limit 5;
+#+END_SRC
+
+#+RESULTS:
+
+| ark        | text                        | n$                          |                    digits |
+|------------+-----------------------------+-----------------------------+---------------------------|
+| d72p44-032 | Yr...........10.96          | Yr...........10.96          |          ...........10.96 |
+| d72p44-032 | Yr......9.86                | Yr......9.86                |                ......9.86 |
+| d72p44-032 | Yr.................10.00    | Yr.................10.00    |    .................10.00 |
+| d72p44-032 | Yr.............11.20        | Yr.............11.20        |        .............11.20 |
+| d72p44-032 | Yr.................11.50    | Yr.................11.50    |    .................11.50 |
+| d72p44-032 | Yr......11.14               | Yr......11.14               |               ......11.14 |
+| d72p44-032 | Yr............11.56         | Yr............11.56         |         ............11.56 |
+| d72p44-032 | Yr.....18.46                | Yr.....18.46                |                .....18.46 |
+| d72p44-032 | Yr.....11.50                | Yr.....11.50                |                .....11.50 |
+| d72p44-032 | Yr....................11.60 | Yr....................11.60 | ....................11.60 |
+
+
+| ark        | text   | n$     | digits |
+|------------+--------+--------+--------|
+| d77g6c-004 | AB.50  | AB.50  |    .50 |
+| d77g6c-004 | A.7D   | A.7D   |     .7 |
+| d77g6c-004 | AB.50  | AB.50  |    .50 |
+| d77g6c-004 | A.7D   | A.7D   |     .7 |
+| d77g6c-004 | o1l.75 | o1l.75 |   1.75 |
+| d77g6c-004 | A.99D  | A.99D  |    .99 |
+| d77g6c-004 | AS.10  | AS.10  |    .10 |
+| d77g6c-004 | o1l.75 | o1l.75 |   1.75 |
+| d77g6c-004 | AS.10  | AS.10  |    .10 |
+| d77g6c-004 | AS.10  | AS.10  |    .10 |
+
+
+| ark        | count |
+|------------+-------|
+| d72p44-032 |    15 | => Word Break
+| d77g6c-004 |    14 | => Patch technique
+| d79591-012 |    12 | => patch
+| d74k53-002 |    12 | => patch
+| d7fw2v-024 |    11 | => patch
+
+#+BEGIN_SRC sql
+create materialized view line_pattern as
+with
+p as (
+select line_id,rotation,(avg(w.height))::integer as height,count(*) from words w
+where word_token(w) in ('P')
+group by line_id,rotation
+),
+l as (
+select
+line_id,rotation,
+string_agg(word_token(w,p.height),'' ORDER by word) as pattern
+from words w join p using (line_id,rotation)
+group by line_id,rotation
+)
+select * from l;
+#+END_SRC
+
+#+RESULTS:
+| SELECT 125568 |
+|---------------|
+
+#+BEGIN_SRC sql
+with lp as (select line_id,rotation,regexp_replace(pattern,'N+','N+','g') as pattern from line_pattern),
+r0 as (
+select pattern,count(*) as r0_count from lp
+where pattern ~ 'P$' and rotation=0
+group by pattern
+),
+r1 as (
+select pattern,count(*) as r1_count from lp
+where pattern ~ 'P$' and rotation!=0
+group by pattern
+),
+u as (
+select *,coalesce(r0_count,r1_count) as count from r0 full outer join r1 using (pattern)
+)
+select * from u
+order by count desc
+limit 10
+#+END_SRC
+
+#+RESULTS:
+| pattern | r0_count | r1_count | count |
+|---------+----------+----------+-------|
+| P       |    15886 |    13579 | 15886 |
+| N+P     |     4494 |     3007 |  4494 |
+| N+PP    |     3373 |     2701 |  3373 |
+| N+_P    |     1096 |     1171 |  1096 |
+| CN+PP   |     1092 |      756 |  1092 |
+| PP      |     1043 |      585 |  1043 |
+| N+_PP   |      842 |      873 |   842 |
+| N+nP    |      643 |      440 |   643 |
+| N+.PP   |      640 |      689 |   640 |
+| N+nPP   |      549 |      404 |   549 |
+
+Wow, I did not expect to see those.  Let me investigate that
+in some more detail
+
+#+BEGIN_SRC sql
+select line_id,rotation,
+string_agg(w.text,'-' order by word) as line
+from line_pattern
+join words w using (line_id,rotation)
+where pattern='NNNNNNNNNNNNPPPPPPPP'
+group by line_id,rotation
+order by line_id,rotation
+limit 1;
+#+END_SRC
+
+#+RESULTS:
+| line_id | rotation | line                                                                                                                                                                    |
+|---------+----------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|  200098 |        0 | CHATEAU-CHATEAU-CHATEAU-CHATEAU-HAUT-HAUT-HAUT-HAUT-BRION..........-BRION..........-BRION..........-BRION..........-12.50-12.50-12.50-12.50-135.00-135.00-135.00-135.00 |
+
+#+BEGIN_SRC sql
+select * from words where
+line_id=200098
+order by word,word_id
+#+END_SRC
+
+#+RESULTS:
+| word_id | page_id | carea_id | par_id | line_id | ark        | rotation | word       | text            | x_wconf | json                                                                                                                                  | height | length | bbox                                                                                                                                                                                               |
+|---------+---------+----------+--------+---------+------------+----------+------------+-----------------+---------+---------------------------------------------------------------------------------------------------------------------------------------+--------+--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1299265 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_594 | CHATEAU         |      96 | {"id": "word_1_594", "tag": "span", "text": "CHATEAU", "class": "ocrx_word", "title": "bbox 2147 2416 2402 2450; x_wconf 96"}         |     34 |    255 | 0103000020967F000001000000050000000000000000C6A040000000000024A3C00000000000C6A0400000000000E0A2C00000000000C4A2400000000000E0A2C00000000000C4A240000000000024A3C00000000000C6A040000000000024A3C0 |
+| 1299266 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_594 | CHATEAU         |      96 | {"id": "word_1_594", "tag": "span", "text": "CHATEAU", "class": "ocrx_word", "title": "bbox 2147 2416 2402 2450; x_wconf 96"}         |     34 |    255 | 0103000020967F000001000000050000000000000000C6A040000000000024A3C00000000000C6A0400000000000E0A2C00000000000C4A2400000000000E0A2C00000000000C4A240000000000024A3C00000000000C6A040000000000024A3C0 |
+| 1299267 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_594 | CHATEAU         |      96 | {"id": "word_1_594", "tag": "span", "text": "CHATEAU", "class": "ocrx_word", "title": "bbox 2147 2416 2402 2450; x_wconf 96"}         |     34 |    255 | 0103000020967F000001000000050000000000000000C6A040000000000024A3C00000000000C6A0400000000000E0A2C00000000000C4A2400000000000E0A2C00000000000C4A240000000000024A3C00000000000C6A040000000000024A3C0 |
+| 1299268 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_594 | CHATEAU         |      96 | {"id": "word_1_594", "tag": "span", "text": "CHATEAU", "class": "ocrx_word", "title": "bbox 2147 2416 2402 2450; x_wconf 96"}         |     34 |    255 | 0103000020967F000001000000050000000000000000C6A040000000000024A3C00000000000C6A0400000000000E0A2C00000000000C4A2400000000000E0A2C00000000000C4A240000000000024A3C00000000000C6A040000000000024A3C0 |
+| 1299325 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_595 | HAUT            |      92 | {"id": "word_1_595", "tag": "span", "text": "HAUT", "class": "ocrx_word", "title": "bbox 2430 2416 2578 2450; x_wconf 92"}            |     34 |    148 | 0103000020967F000001000000050000000000000000FCA240000000000024A3C00000000000FCA2400000000000E0A2C0000000000024A4400000000000E0A2C0000000000024A440000000000024A3C00000000000FCA240000000000024A3C0 |
+| 1299326 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_595 | HAUT            |      92 | {"id": "word_1_595", "tag": "span", "text": "HAUT", "class": "ocrx_word", "title": "bbox 2430 2416 2578 2450; x_wconf 92"}            |     34 |    148 | 0103000020967F000001000000050000000000000000FCA240000000000024A3C00000000000FCA2400000000000E0A2C0000000000024A4400000000000E0A2C0000000000024A440000000000024A3C00000000000FCA240000000000024A3C0 |
+| 1299327 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_595 | HAUT            |      92 | {"id": "word_1_595", "tag": "span", "text": "HAUT", "class": "ocrx_word", "title": "bbox 2430 2416 2578 2450; x_wconf 92"}            |     34 |    148 | 0103000020967F000001000000050000000000000000FCA240000000000024A3C00000000000FCA2400000000000E0A2C0000000000024A4400000000000E0A2C0000000000024A440000000000024A3C00000000000FCA240000000000024A3C0 |
+| 1299328 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_595 | HAUT            |      92 | {"id": "word_1_595", "tag": "span", "text": "HAUT", "class": "ocrx_word", "title": "bbox 2430 2416 2578 2450; x_wconf 92"}            |     34 |    148 | 0103000020967F000001000000050000000000000000FCA240000000000024A3C00000000000FCA2400000000000E0A2C0000000000024A4400000000000E0A2C0000000000024A440000000000024A3C00000000000FCA240000000000024A3C0 |
+| 1299321 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_596 | BRION.......... |      89 | {"id": "word_1_596", "tag": "span", "text": "BRION..........", "class": "ocrx_word", "title": "bbox 2606 2414 3015 2449; x_wconf 89"} |     35 |    409 | 0103000020967F0000010000000500000000000000005CA440000000000022A3C000000000005CA4400000000000DCA2C000000000008EA7400000000000DCA2C000000000008EA740000000000022A3C000000000005CA440000000000022A3C0 |
+| 1299322 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_596 | BRION.......... |      89 | {"id": "word_1_596", "tag": "span", "text": "BRION..........", "class": "ocrx_word", "title": "bbox 2606 2414 3015 2449; x_wconf 89"} |     35 |    409 | 0103000020967F0000010000000500000000000000005CA440000000000022A3C000000000005CA4400000000000DCA2C000000000008EA7400000000000DCA2C000000000008EA740000000000022A3C000000000005CA440000000000022A3C0 |
+| 1299323 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_596 | BRION.......... |      89 | {"id": "word_1_596", "tag": "span", "text": "BRION..........", "class": "ocrx_word", "title": "bbox 2606 2414 3015 2449; x_wconf 89"} |     35 |    409 | 0103000020967F0000010000000500000000000000005CA440000000000022A3C000000000005CA4400000000000DCA2C000000000008EA7400000000000DCA2C000000000008EA740000000000022A3C000000000005CA440000000000022A3C0 |
+| 1299324 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_596 | BRION.......... |      89 | {"id": "word_1_596", "tag": "span", "text": "BRION..........", "class": "ocrx_word", "title": "bbox 2606 2414 3015 2449; x_wconf 89"} |     35 |    409 | 0103000020967F0000010000000500000000000000005CA440000000000022A3C000000000005CA4400000000000DCA2C000000000008EA7400000000000DCA2C000000000008EA740000000000022A3C000000000005CA440000000000022A3C0 |
+| 1299309 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_597 | 12.50           |      87 | {"id": "word_1_597", "tag": "span", "text": "12.50", "class": "ocrx_word", "title": "bbox 3074 2413 3223 2449; x_wconf 87"}           |     36 |    149 | 0103000020967F00000100000005000000000000000004A840000000000022A3C0000000000004A8400000000000DAA2C000000000002EA9400000000000DAA2C000000000002EA940000000000022A3C0000000000004A840000000000022A3C0 |
+| 1299310 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_597 | 12.50           |      87 | {"id": "word_1_597", "tag": "span", "text": "12.50", "class": "ocrx_word", "title": "bbox 3074 2413 3223 2449; x_wconf 87"}           |     36 |    149 | 0103000020967F00000100000005000000000000000004A840000000000022A3C0000000000004A8400000000000DAA2C000000000002EA9400000000000DAA2C000000000002EA940000000000022A3C0000000000004A840000000000022A3C0 |
+| 1299311 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_597 | 12.50           |      87 | {"id": "word_1_597", "tag": "span", "text": "12.50", "class": "ocrx_word", "title": "bbox 3074 2413 3223 2449; x_wconf 87"}           |     36 |    149 | 0103000020967F00000100000005000000000000000004A840000000000022A3C0000000000004A8400000000000DAA2C000000000002EA9400000000000DAA2C000000000002EA940000000000022A3C0000000000004A840000000000022A3C0 |
+| 1299312 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_597 | 12.50           |      87 | {"id": "word_1_597", "tag": "span", "text": "12.50", "class": "ocrx_word", "title": "bbox 3074 2413 3223 2449; x_wconf 87"}           |     36 |    149 | 0103000020967F00000100000005000000000000000004A840000000000022A3C0000000000004A8400000000000DAA2C000000000002EA9400000000000DAA2C000000000002EA940000000000022A3C0000000000004A840000000000022A3C0 |
+| 1299337 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_598 | 135.00          |      87 | {"id": "word_1_598", "tag": "span", "text": "135.00", "class": "ocrx_word", "title": "bbox 3306 2413 3492 2449; x_wconf 87"}          |     36 |    186 | 0103000020967F000001000000050000000000000000D4A940000000000022A3C00000000000D4A9400000000000DAA2C0000000000048AB400000000000DAA2C0000000000048AB40000000000022A3C00000000000D4A940000000000022A3C0 |
+| 1299338 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_598 | 135.00          |      87 | {"id": "word_1_598", "tag": "span", "text": "135.00", "class": "ocrx_word", "title": "bbox 3306 2413 3492 2449; x_wconf 87"}          |     36 |    186 | 0103000020967F000001000000050000000000000000D4A940000000000022A3C00000000000D4A9400000000000DAA2C0000000000048AB400000000000DAA2C0000000000048AB40000000000022A3C00000000000D4A940000000000022A3C0 |
+| 1299339 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_598 | 135.00          |      87 | {"id": "word_1_598", "tag": "span", "text": "135.00", "class": "ocrx_word", "title": "bbox 3306 2413 3492 2449; x_wconf 87"}          |     36 |    186 | 0103000020967F000001000000050000000000000000D4A940000000000022A3C00000000000D4A9400000000000DAA2C0000000000048AB400000000000DAA2C0000000000048AB40000000000022A3C00000000000D4A940000000000022A3C0 |
+| 1299340 |    5458 |    65095 |  77073 |  200098 | d7bc7n-007 |        0 | word_1_598 | 135.00          |      87 | {"id": "word_1_598", "tag": "span", "text": "135.00", "class": "ocrx_word", "title": "bbox 3306 2413 3492 2449; x_wconf 87"}          |     36 |    186 | 0103000020967F000001000000050000000000000000D4A940000000000022A3C00000000000D4A9400000000000DAA2C0000000000048AB400000000000DAA2C0000000000048AB40000000000022A3C00000000000D4A940000000000022A3C0 |
+
+** Image Rotation
+
+Once we have an original set of text extractions, we can use this to try and
+find what rotations we might use.  For example, if we find columns of numbers,
+we can see if those columns are really vertical.  From this we can build some
+potential rotations.
+
+#+BEGIN_SRC sql
+	drop view rotate;
+  create materialized view rotate as
+  with a as (
+    select ark,'id'::text as type,bbox,
+    ST_ClusterDBSCAN(lhs_0, eps := 50, minpoints:=6)
+    over (partition by ark) as col
+    from identifiers
+   union
+   select ark,'price'::text as type,bbox,
+   ST_ClusterDBSCAN(rhs_0, eps := 50, minpoints:=6)
+   over (partition by ark) as col
+   from prices
+  ),
+  b as (
+  select ark,type,col,
+  case when (type='id')
+   then regr_slope(st_xmin(bbox),-st_ymin(bbox))
+   else regr_slope(st_xmax(bbox),-st_ymin(bbox))
+  end as slope
+  from a where col is not null group by ark,type,col
+  ),
+  c as (
+  select ark,type,col,slope*180/3.14159 as rotation
+  from b
+  )
+  select * from c;
+
+
+#+END_SRC
+
+#+RESULTS:
+| DROP VIEW   |
+|-------------|
+| SELECT 7396 |
+
+From our rotation estimates, we can then use the iiif and tesseract services to
+rotate the images.
+
+#+BEGIN_SRC bash
+for i in $(psql -At postgres://postgres@localhost:5433/postgres \
+-c "with a as (select ark,type,avg(rotation)::decimal(6,2) as r,max(rotation)-min(rotation) as delta,array_agg(rotation order by rotation) as rs from rotate group by ark,type) select ark,r from a where type='price' order by delta desc"); do
+ echo $i; \
+done | wc -l
+#+END_SRC
+
+#+RESULTS:
+: 1656
+
+
+#+BEGIN_SRC bash
+PG="psql -At postgres://postgres@localhost:5433/postgres"
+read -r -d '' sql <<SQL;
+with a as (
+ select ark,type,avg(rotation)::decimal(6,2) as r
+ from rotate group by ark,type
+)
+select ark,
+case when(r<0) THEN 360+r ELSE r END as r
+from a where type='price' order by a.r asc
+SQL
+
+for i in $(psql $PG -c "$sql"); do
+  IFS='|' read ark r <<<"$i";
+  d=${ark%-*};
+  o=ark_87287/tesseract/rotate/$ark;
+  url="https://sandbox.dams.library.ucdavis.edu/fcrepo/rest/collection/sherry-lehmann/catalogs/$d/media/images/$ark/svc:tesseract/full/full/$r/default.jpg Accept:application/hocr+xml";
+  echo $ark $r;
+  echo "r=$r" > $o.r;
+  echo $url >>$o.r;
+  http --output=$d/$ark/rotated.hocr $url;
+done
+#+END_SRC
+
+#+RESULTS:
+
+*** Importing the rotated data
+
+Now, like with the unrotated date, we will get that into the JSON format that
+we can update.  I'll use the same method as for the unrotated, b
+
+#+BEGIN_SRC bash
+rm rotated.json;
+for i in $(find ark_87287 -name rotated.hocr); do
+if [[ -s $i ]]; then
+ ark=$(basename $(dirname $i));
+ echo $ark;
+ b=${i%.hocr};
+ eval $(head -1 $b.r);
+ echo -n -e "$ark\t$r\t" >> rotated.json;
+ pup 'div.ocr_page json{}' < $i | jq -c . | sed -e 's/\\/\\\\/g' >> rotated.json;
+fi;
+done
+#+END_SRC
+
+#+RESULTS:
+
+Argh, these semi-rotated files should be removed.
+#+BEGIN_SRC bash
+  for i in d7c01w-010 d7hp45-030 d7bc7n-007 d7nk5r-013  d7vp48-030 d7r592-015 d7c01w-008 ; do
+   ark=${i%%-*}
+   rm ark_87287/$ark/$i/rotated.hocr
+   rm ark_87287/$ark/$i/rotated.r
+  done
+#+END_SRC
+
+Now redo the rotated data.
+
+#+RESULTS:
+
+
+
+Then import these into hocr with
+#+BEGIN_SRC sql
+ \COPY hocr (ark¸rotation,hocr) from rotated.json
+#+END_SRC
+
+*** Translating the rotated data
+
+OK, but now the tesseract images are with respect to another frame of reference,
+we need to rotate the image back to that frame.  Fortunately, we have the image
+sizes,
+
+
+    w_returned = abs(w*cos(n)) + abs(h*sin(n))
+    h_returned = abs(h*cos(n)) + abs(w*sin(n))
+
+
+* Extracting title,date from metadata.ttl
+Eric needed a spreadsheet of the catalog data.  This is how I got that to him.
+This uses the apache JENA command line.
+
+#+BEGIN_SRC bash
+for i in ark_87287/*; do
+  n=$(echo $i | tr '_' ':');
+  echo -n "$n,";
+  sparql --data=$i/metadata.ttl --results=CSV --query=- <<<"prefix : <http://schema.org/>  select ?n ?d WHERE { ?s :name ?n . ?s :datePublished ?d . }" 2>/dev/null | tail -1;
+done | tee catalog_list.csv
+
+#+END_SRC
+
+
+* Jane's R Scripts
+
+** Ancillary Files
+When Jane moved to a library version, she has created a number of data packages.
+If I use these as the canonical versions, then I should import these tables into
+postgres.  You can do that this way.
+
+#+BEGIN_SRC sql
+drop schema if exists ancil cascade;
+create schema ancil;
+create table ancil.countries (
+  country_id serial primary key,
+  country text
+);
+create table ancil.countries_adj (
+  country_id serial primary key,
+  country_adj text
+);
+create table ancil.designations (
+  designation_id serial primary key,
+  designation text
+);
+create table ancil.producers (
+  producer_id serial primary key,
+  producer text,
+  country text
+);
+create table ancil.provinces (
+  province_id serial primary key,
+  province text,
+  country text
+);
+create table ancil.regions (
+  region_id serial primary key,
+  region text,
+  country text
+);
+create table ancil.varieties (
+  variety_id serial primary key,
+  variety text
+);
+
+#+END_SRC
+
+#+RESULTS:
+| DROP SCHEMA   |
+|---------------|
+| CREATE SCHEMA |
+| CREATE TABLE  |
+| CREATE TABLE  |
+| CREATE TABLE  |
+| CREATE TABLE  |
+| CREATE TABLE  |
+| CREATE TABLE  |
+| CREATE TABLE  |
+
+#+BEGIN_SRC bash
+dc='docker-compose -f /home/quinn/wine-price-extraction/sloan.yml -p sloan';
+for d in countries countries_adj designations producers  provinces regions varieties; do
+  docker exec -i $($dc ps -q sloan) R --slave --vanilla <<<"library(tablewine);data($d);write.csv($d)" |\
+  psql service=sloan -c "copy ancil.$d from stdin with csv header";
+done
+#+END_SRC
+
+#+RESULTS:
+| COPY |   239 |
+| COPY |   174 |
+| COPY | 35389 |
+| COPY | 16270 |
+| COPY |   383 |
+| COPY |  1165 |
+| COPY |   683 |
+
+#+BEGIN_SRC sql
+update countries set country=trim(both from country);
+update ancil.countries_adj set  country_adj=trim(both from country_adj);
+update ancil.designations set  designation=trim(both from designation);
+update ancil.producers set  producer=trim(both from producer), country=trim(both from country) ;
+update ancil.provinces set  province=trim(both from province), country=trim(both from country) ;
+update ancil.regions set region=trim(both from region), country=trim(both from country) ;
+update ancil.varieties set  variety=trim(both from variety);
+
+#+END_SRC
+
+#+RESULTS:
+
+** RData
+
+This is a simple goofy script that reads the _data1.RDS files from the google
+cloud, and then writes those to a CSV file.  These are collected into a single
+table.
+
+#+BEGIN_SRC bash
+#id=$(sloan-dc ps -q sloan)
+id=a53c3cd7cf03b9543194e2d2c696674f900845aef14e2035a84965dda35a9475
+rm io/data1.csv
+for i in $(find io/sloan-ocr/D* -name \*_data1.RDS); do
+ n=${i%_data1.RDS}; b=$(basename $n);
+ docker exec -i $id R --slave --vanilla <<<"write.csv(readRDS('/$i'),stdout())" |\
+ sed -e "s/^/$b,/" >> io/data1.csv ;
+done
+wc -l io/data1.csv
+#+END_SRC
+
+#+RESULTS:
+: 9930751 io/data1.csv
+
+
+Then we can add this to our schema.
+
+#+BEGIN_SRC sql
+	\set s eng_jane
+  create table :s.data1 (
+    ark text not null,
+    word_idx integer,
+    "left" integer,
+    bottom integer,
+    "right" integer,
+    top integer,
+    "text" text,
+    confidence float
+    );
+
+--truncate :s.data1;
+--\COPY eng_jane.data1 from 'io/data1.csv' with csv
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC sql
+\set s eng_jane
+drop table if exists :s.r_words;
+create table :s.r_words as
+select ark,text,
+st_setsrid(st_makebox2d(st_makepoint("left",-bottom),st_makePoint("right",-top)),32662) as bbox
+from :s.data1;
+alter table :s.r_words add r_word_id serial primary key;
+
+create index words_bbox_idx on :s.words using gist(bbox);
+create index words_word on :s.words(word);
+create index words_ark on :s.words(ark);
+#+END_SRC
+
+#+RESULTS:
+| DROP TABLE     |
+|----------------|
+| SELECT 9923383 |
+| ALTER TABLE    |
+| CREATE INDEX   |
+| CREATE INDEX   |
+| CREATE INDEX   |
+
+Now, if we want to find the overlapping words between the two tables, we need to
+do something like:
+
+#+BEGIN_SRC sql
+create materialized view :s.closely_overlapping_words as
+select c.ark,
+ c.word_id,
+ j.jword_id,
+ st_intersection(c.bbox,j.bbox) as intersection
+ from :s.words j join catalogs.words c
+ on (c.ark=j.ark and st_intersects(c.bbox,j.bbox) and
+     ( st_area(st_intersection(c.bbox,j.bbox))/st_area(j.bbox) > 0.9 and
+       st_area(st_intersection(c.bbox,j.bbox))/st_area(c.bbox) > 0.9 )
+    );
+#+END_SRC
+
+
+** Running Scripts
+
+The first step is to run the parse_items.RDS command over all the data.  From
+this we can run the steps to create the CSV files.  These can be combined to run at the same time.
+
+#+BEGIN_SRC bash
+s=/opt/dsi/scripts
+R='Rscript --vanilla'
+for i in $(find /io/sloan-ocr/D-* -name \*-[0-9][0-9][0-9].RDS ); do
+ d=$(dirname $i);
+ if [[ ! -f $d/PRICE_NAME.csv ]]; then
+   if [[ ! -f $d/parsed_items.RDS ]]; then
+     $R $s/run_parse_items.R name.input.dir=$d name.output.dir=$d 2> /dev/null > /dev/null;
+   fi ;
+   $R $s/run_wine_database_one_page.R truth.dir=/io/dsiData in=$d/parsed_items.RDS 2>/dev/null >/dev/null;
+ fi;
+ wc -l $d/PRICE_NAME.csv;
+done
+#+END_SRC
+
+#+RESULTS:
+
+
+** CSV Outputs
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create table :s.entry_page(
+"angle" float,
+"angle_conf" float,
+"height" integer,
+"width" integer,
+"binary.threshold" integer,
+"pix.threshold" float,
+"pix.newValue" float,
+"file_id" text
+);
+#+END_SRC
+
+#+RESULTS:
+| CREATE TABLE |
+|--------------|
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create view :s.entry_page_rotation_deltas as
+with
+b as (
+ select file_id as page_ark,
+ angle as rotation,
+ width as x,
+ -height as y
+ from :s.entry_page
+)
+select page_ark,b.rotation,
+ b.rotation*pi()/180 as rad,
+-(b.x-b1.x)/2 as dx,
+-(b.y-b1.y)/2 as dy,
+b.x as x,
+b.y as y,
+b.x/2 as cx,
+b.y/2 as cy
+from b;
+
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC bash
+#base='io/sloan-ocr/D*'
+base='io/sloan-ocr'  # For tests w/ one-test
+rm entry_page.csv
+for i in $(find $base -name ENTRY_PAGE.csv); do
+  f=$(basename $(dirname $i));
+  tail -n +2 $i | sed -e "s/NA$/$f/" >> entry_page.csv;
+done
+wc -l entry_page.csv
+#+END_SRC
+
+#+RESULTS:
+: 5492 entry_page.csv
+
+: 5084 entry_page.csv
+
+Then imported into the system:
+#+BEGIN_SRC bash
+  s=eng_jane
+  psql service=sloan --set=s=eng_jane -c "truncate $s.entry_page;copy $s.entry_page from STDIN CSV NULL 'NA'" < entry_page.csv
+#+END_SRC
+
+#+RESULTS:
+: COPY 5492
+: COPY 5084
+
+The entry_price table is the collection of name and prices linked together.
+There are multiple
+
+#+BEGIN_SRC sql
+\set s eng_jane
+drop table if exists :s.entry_price cascade;
+create table :s.entry_price(
+"left" float,
+"bottom" float,
+"right" float,
+"top" float,
+"confidence" float,
+"cluster" integer,
+"table" integer,
+"row" integer,
+"column" float,
+"file_id" text,
+"entry_id" text,
+"name_id" text,
+"col.header" text,
+"price_center_x_orig" float,
+"price_center_y_orig" float,
+"price_true" text,
+"truth_entered_by" text,
+"price_raw" text,
+"type_raw" text,
+"price_new" text,
+"type_new" text,
+"flag_order" boolean,
+"flag_ratio" boolean,
+"flag_amount" boolean,
+"flag_format" boolean,
+"flag_digit" boolean,
+"flag_raw_year" boolean,
+"flag_type_new" boolean,
+"sum_flag" integer
+);
+#+END_SRC
+
+#+RESULTS:
+| DROP TABLE   |
+|--------------|
+| CREATE TABLE |
+
+
+#+BEGIN_SRC bash
+  #base='io/sloan-ocr/D*'
+  base='io/sloan-ocr'  # For tests w/ one-test
+  rm entry_price.csv
+  for i in $(find $base -name ENTRY_PRICE.csv); do
+    tail -n +2 $i >> entry_price.csv;
+  done
+  wc -l entry_price.csv
+#+END_SRC
+
+#+RESULTS:
+: 449512 entry_price.csv
+- 06/28
+: 415582 entry_price.csv
+
+Then imported into the system:
+#+BEGIN_SRC bash
+  s=eng_jane
+  psql service=sloan -c "truncate $s.entry_price;copy $s.entry_price from STDIN CSV NULL 'NA'" < entry_price.csv
+#+END_SRC
+
+#+RESULTS:
+: COPY 449512
+
+The next table, the entry_name is adds additional information from joining the
+entries with additional information from a wine database.
+
+#+BEGIN_SRC sql
+  \set s eng_jane
+  drop table if exists :s.entry_name;
+  create table :s.entry_name(
+    "text" text,
+    "text_raw" text,
+    "text_conf" text,
+    "name" text,
+    "keywords" text,
+    "upper_text" text,
+    "lower_text" text,
+    "brackets_text" text,
+    "id" text,
+    "year" integer,
+    "color" text,
+    "province" text,
+    "region" text,
+    "producer" text,
+    "designation" text,
+    "variety" text,
+    "country" text,
+    "id_conf" text,
+    "year_conf" text,
+    "color_conf" text,
+    "province_sim" text,
+    "region_sim" text,
+    "producer_sim" text,
+    "designation_sim" text,
+    "variety_sim" text,
+    "brackets_conf" text,
+    "upper_text_hit" text,
+    "lower_text_hit" text,
+    "brackets_text_hit" text,
+    "inspect" text,
+    "dictionary_hit" text,
+    "any_hit" text,
+	  "name_trim" text,
+    "table" text,
+    "file" text,
+    "file_id" text,
+    "name_id" text,
+    "l" float,
+    "b" float,
+    "r" float,
+    "t" float,
+    "name_center_x_orig" float,
+    "name_center_y_orig" float
+    );
+#+END_SRC
+
+#+RESULTS:
+| DROP TABLE   |
+|--------------|
+| CREATE TABLE |
+
+I don't know why a small number have a 'text_conf' entry
+#+BEGIN_SRC bash
+  base='io/sloan-ocr/D*'
+  #base='io/test'  # For tests w/ one-test
+  rm entry_name*.csv
+  for i in $(find $base -name ENTRY_NAME.csv); do
+    f=$(basename $(dirname $i));
+    if (head -1 $i | grep -q text_conf); then
+      tail -n +2 $i | sed -e 's/NULL/NA/g;' -e 's/"NA"/NA/g;' >> entry_name_with_conf.csv;
+    else
+      tail -n +2 $i | sed -e 's/NULL/NA/g;' -e 's/"NA"/NA/g;' >> entry_name_without_conf.csv;
+    fi
+  done
+  wc -l entry_name*.csv
+#+END_SRC
+
+#+RESULTS:
+|  10822 | entry_name_with_conf.csv    |
+| 231405 | entry_name_without_conf.csv |
+| 242227 | total                       |
+
+06/28
+|  20722 | entry_name_with_conf.csv    |
+| 220504 | entry_name_without_conf.csv |
+| 241226 | total                       |
+
+Then imported into the system as one table.
+
+#+BEGIN_SRC bash
+  s=eng_jane
+  psql service=sloan -c "truncate $s.entry_name;"
+  psql service=sloan -c "copy $s.entry_name (\"text\",\"text_raw\",\"text_conf\",\"name\",\"keywords\",\"upper_text\",\"lower_text\",\"brackets_text\",\"id\",\"year\",\"color\",\"province\",\"region\",\"producer\",\"designation\",\"variety\",\"country\",\"id_conf\",\"year_conf\",\"color_conf\",\"province_sim\",\"region_sim\",\"producer_sim\",\"designation_sim\",\"variety_sim\",\"brackets_conf\",\"upper_text_hit\",\"lower_text_hit\",\"brackets_text_hit\",\"inspect\",\"dictionary_hit\",\"any_hit\",\"name_trim\",\"table\",\"file\",\"file_id\",\"name_id\",\"l\",\"b\",\"r\",\"t\",\"name_center_x_orig\",\"name_center_y_orig\") from STDIN CSV NULL 'NA'" < entry_name_with_conf.csv
+  psql service=sloan -c "copy $s.entry_name (\"text\",\"text_raw\",\"name\",\"keywords\",\"upper_text\",\"lower_text\",\"brackets_text\",\"id\",\"year\",\"color\",\"province\",\"region\",\"producer\",\"designation\",\"variety\",\"country\",\"id_conf\",\"year_conf\",\"color_conf\",\"province_sim\",\"region_sim\",\"producer_sim\",\"designation_sim\",\"variety_sim\",\"brackets_conf\",\"upper_text_hit\",\"lower_text_hit\",\"brackets_text_hit\",\"inspect\",\"dictionary_hit\",\"any_hit\",\"name_trim\",\"table\",\"file\",\"file_id\",\"name_id\",\"l\",\"b\",\"r\",\"t\",\"name_center_x_orig\",\"name_center_y_orig\") from STDIN CSV NULL 'NA'" < entry_name_without_conf.csv
+#  psql service=sloan -c "update $s.entry_name set page_ark=split_part(file,'/',9)"
+#+END_SRC
+
+#+RESULTS:
+| TRUNCATE |  TABLE |
+| COPY     |   7674 |
+| COPY     | 231405 |
+
+#+BEGIN_SRC sql
+\set s eng_jane
+drop table if exists :s.name_match;
+  create table :s.name_match(
+  "text" text,
+  confidence text,
+  name_id text,
+  word_id text,
+  page_ark text
+  );
+#+END_SRC
+
+#+RESULTS:
+| DROP TABLE   |
+|--------------|
+| CREATE TABLE |
+
+#+BEGIN_SRC bash
+  base='io/sloan-ocr/D*'
+  #base='io/test'  # For tests w/ one-test
+  rm name_match.csv
+  for i in $(find $base -name NAME_MATCH.csv); do
+    f=$(basename $(dirname $i));
+    tail -n +2 $i | sed -e "s/$/,$f/" >> name_match.csv;
+  done
+  wc -l name_match.csv
+#+END_SRC
+
+#+RESULTS:
+: 1961056 name_match.csv
+
+-06/28
+: 3352336 name_match.csv
+
+#+BEGIN_SRC bash
+  s=eng_jane
+  psql service=sloan -c "truncate $s.name_match;"
+  psql service=sloan -c "copy $s.name_match from STDIN CSV NULL 'NA'" < name_match.csv
+#+END_SRC
+
+#+RESULTS:
+| TRUNCATE |   TABLE |
+| COPY     | 1961056 |
+
+
+#+BEGIN_SRC sql
+\set s eng_jane
+drop table if exists :s.name_summary_global_stats;
+create table :s.name_summary_global_stats (
+  key text,
+  value text,
+  page_ark text
+);
+#+END_SRC
+
+#+RESULTS:
+| DROP TABLE   |
+|--------------|
+| CREATE TABLE |
+
+#+BEGIN_SRC bash
+  base='io/sloan-ocr/D*'
+  #base='io/test'  # For tests w/ one-test
+  rm name_summary_global_stats.csv
+  for i in $(find $base -name name_summary_global_stats.csv); do
+    f=$(basename $(dirname $i));
+    tail -n +2 $i | sed -e "s/$/,$f/" >> name_summary_global_stats.csv;
+  done
+  wc -l name_summary_global_stats.csv
+#+END_SRC
+
+#+RESULTS:
+: 137300 name_summary_global_stats.csv
+
+-06/28
+: 127050 name_summary_global_stats.csv
+
+#+BEGIN_SRC bash
+  s=eng_jane
+  psql service=sloan -c "truncate $s.name_summary_global_stats;"
+  psql service=sloan -c "copy $s.name_summary_global_stats from STDIN CSV NULL 'NA'" < name_summary_global_stats.csv
+#+END_SRC
+
+#+RESULTS:
+| TRUNCATE |  TABLE |
+| COPY     | 137300 |
+
+#+BEGIN_SRC sql
+\set s eng_jane
+drop table if exists :s.price_name cascade;
+create table :s.price_name (
+  "price_raw" text,
+  "confidence" float,
+  "type_new" text,
+  "price_new" text,
+  "cluster" integer,
+  "table" integer,
+  "row" integer,
+  "column" float,
+  "entry_id" text,
+  "name_id" text,
+  "price_true" text,
+  "truth_entered_by" text,
+  "col.header" text,
+  "text_raw" text,
+  "name" text,
+  "name_trim" text,
+  "id" text,
+  "file_id" text,
+  "country" text,
+  "year" integer,
+  "color" text,
+  "variety" text,
+  "region" text,
+  "province" text,
+  "designation" text
+  );
+
+#+END_SRC
+
+#+RESULTS:
+| DROP TABLE   |
+|--------------|
+| CREATE TABLE |
+
+#+BEGIN_SRC bash
+  base='io/sloan-ocr/D*'
+  #base='io/test'  # For tests w/ one-test
+  rm price_name.csv
+  for i in $(find $base -name PRICE_NAME.csv); do
+       tail -n +2 $i | sed -e 's/NULL/NA/g;' -e 's/"NA"/NA/g;' >> price_name.csv;
+  done
+  wc -l price_name.csv
+#+END_SRC
+
+#+RESULTS:
+: 449513 price_name.csv
+
+-06/28
+: 415580 price_name.csv
+
+Then imported into the system
+#+BEGIN_SRC bash
+  s=eng_jane
+  psql service=sloan -c "truncate $s.price_name;copy $s.price_name from STDIN CSV NULL 'NA'" < price_name.csv
+#+END_SRC
+
+#+RESULTS:
+: COPY 449513
+
+*** Updated Prices
+
+There are a number of none price number prices that could be fixed (It's pretty
+small), Below is an example of some of these.
+
+#+BEGIN_SRC sql
+\set s eng_jane
+with a(name,regex,replace) as (
+ VALUES ('FALSE','^FALSE$',null),
+ ('9.99[.,]','^(\d+\.\d\d)[.,]$','\1'),
+ ('9.9.','^(\d+\.\d)[.,]$','\1'||'0'),
+ ('9.9x','^(\d+\.\d)$','\1'||'0'),
+ ('9.99','^(\d+\.\d\d)$','\1'),
+ ('$9.99','^$(\d+\.\d\d)$','\1')
+),
+b as ( select
+   a.name,
+   type_new,
+   price_new,
+   regexp_replace(price_new,regex,replace) as price
+  from a,:s.price_name p
+  where p.price_new ~ a.regex
+),
+c as ( select
+ name,count(*)
+ from b group by 1
+ order by 2 desc
+)
+select * from b
+where name not in ( '9.99','FALSE')
+#+END_SRC
+
+#+RESULTS:
+| name     | type_new | price_new |   price |
+|----------+----------+-----------+---------|
+| 9.99[.,] | price*   |     0.98. |    0.98 |
+| 9.99[.,] | price*   |  1595.60. | 1595.60 |
+| 9.99[.,] | price*   |     7.39. |    7.39 |
+| 9.99[.,] | price*   |    95.24. |   95.24 |
+
+** Getting Data From Google Cloud
+
+#+BEGIN_SRC bash
+gsutil rsync -r gs://sloan-ocr/ sloan-ocr
+#+END_SRC
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create or replace view :s.near_numbers as
+with a as (
+ select text,
+ regexp_replace(text,'[^0-9.]','','g') as num
+ from :s.words where text ~ '\d.*\d'
+)
+select
+text,
+length(text) as length,
+num,
+levenshtein(text,num) as dist
+from a
+where levenshtein(text,num) < length(text)*0.3;
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+| CREATE VIEW |
+
+#+BEGIN_SRC sql
+\set s eng_jane
+DROP FUNCTION if exists public.box_link(text,double precision,double precision,double precision,double precision);
+create or replace function public.box_link(
+ file_id text,
+ top float,
+ left float,
+ bottom float,
+ right float,
+ out link text) as $$
+BEGIN
+  SELECT INTO link
+  format('https://digital.ucdavis.edu/ark:/87287/%s/media/images/%s.jpg/svc:iiif/%s,%s,%s,%s/full/0/default.jpg',
+  split_part(file_id,'-',1),file_id,top,"left",top-bottom,"right"-"left");
+END;
+$$ LANGUAGE PLPGSQL IMMUTABLE;
+#+END_SRC
+
+#+RESULTS:
+| DROP FUNCTION   |
+|-----------------|
+| CREATE FUNCTION |
+
+
+** Investigating the Truth Tables
+
+*** Updating the Truth tables
+
+#+BEGIN_SRC sql
+\set s eng_jane
+
+create table fix.truth_all (
+num integer,
+file_id text,
+"table" integer,
+cluster integer,
+row integer,
+text_true text,
+truth_entered_by text,
+accurate_file text
+);
+#+END_SRC
+
+#+RESULTS:
+| CREATE TABLE |
+|--------------|
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create table fix.xwalk (
+file text,
+page_ark text,
+x integer,
+y integer);
+#+END_SRC
+
+#+RESULTS:
+| CREATE TABLE |
+|--------------|
+
+We can then create a truth table for the DSI data.  All of the accurate files
+are included in this setup.
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create table :s.dsi_truth as
+select
+ page_ark,
+ "table",cluster,row,
+ text_true,truth_entered_by
+from fix.truth_all
+join fix.xwalk
+on file=file_id
+where accurate_file='TRUE';
+#+END_SRC
+
+
+*** PTV Truth Tables
+
+#+BEGIN_SRC sql
+\set s eng_jane
+drop table if exists catalogs.crowd_source;
+create table catalogs.crowd_source (
+page_ark text,
+edit_id text,
+mark_id text,
+file_id text,
+catalog_no text,
+section text,
+name text,
+vintage integer,
+perprice float,
+caseprice float,
+bottle_type text,
+type text,
+wine_type text,
+color text,
+country text,
+xy integer[2]
+);
+#+END_SRC
+
+#+RESULTS:
+| DROP TABLE   |
+|--------------|
+| CREATE TABLE |
+
+#+BEGIN_SRC sql
+\COPY catalogs.crowd_source from csv/crowd_source.csv with csv header
+alter table catalogs.crowd_source drop column mark_id;
+alter table catalogs.crowd_source drop column file_id;
+alter table catalogs.crowd_source drop column edit_id;
+#+END_SRC
+
+#+RESULTS:
+| COPY 1343   |
+|-------------|
+| ALTER TABLE |
+| ALTER TABLE |
+| ALTER TABLE |
+
+The Price the Vintage truth tables can be joined either by picking the closest
+entry, or by picking the best name match.  Let's try both. First, let's organize
+the table aggregating the prices together.  Also we'll get the UL of the entry
+name box, to compare to the marks.
+
+#+BEGIN_SRC sql
+\set s eng_jane
+drop materialized view if exists :s.entries cascade;
+create materialized view :s.entries as
+with a as (
+ select
+ name_id,
+-- array_agg(price_raw order by col ) as price_raw,
+ array_agg(price_new order by "column") as price_per_column,
+ array_agg("col.header" order by "column") as header_per_column
+ from :s.entry_price
+ group by name_id
+),
+n as (
+ select *,price_new::float as pf from :s.entry_price where isnumeric(price_new)
+),
+b as (
+select name_id,
+ array_agg("col.header" order by pf) as price_header,
+ array_agg(pf order by pf) as price,
+ min("left") as l,
+ max("right") as r,
+ max(top) as t,
+ min(bottom) as b
+from n
+where (pf > 0) and (pf < 10^5)
+group by name_id
+),
+c as (
+select b.*,
+price[1]::decimal(7,2) as perprice,
+case when (array_length(price,1)=1) then
+ null::decimal(7,2)
+else
+ price[array_length(price,1)]::decimal(7,2)
+end as caseprice,
+array_length(price,1) as price_cnt
+from b
+)
+select
+ file_id as page_ark,
+ split_part(file_id,'-',1) as ark,
+ split_part(file_id,'-',2)::integer as page,
+ cat.year as year_published,
+ name_id,
+ e.name_trim as name,
+ e.country,
+ e.year as vintage,
+ e.color,
+ regexp_replace(e.producer,'^list.*\s=\s.*"([^"]+)".*$','\1') as producer,
+ regexp_replace(e.variety,'^list.*\s=\s.*"([^"]+)".*$','\1') as variety,
+ regexp_replace(e.region,'^list.*\s=\s.*"([^"]+)".*$','\1') as region,
+ regexp_replace(e.province,'^list.*\s=\s.*"([^"]+)".*$','\1') as province,
+-- e.designation,
+ c.perprice,c.caseprice,c.price_cnt,c.price_header,
+ a.price_per_column,a.header_per_column,
+ st_makePoint(least(e.l,c.l),greatest(-e.t,-c.t)) as ul,
+ st_makeLine(st_makePoint(least(e.l,c.l),greatest(-e.t,-c.t)),
+             st_makePoint(least(e.l,c.l),least(-e.b,-c.b))) as left_side,
+ st_makeBox2d(
+                           st_makePoint(least(e.l,c.l),greatest(-e.t,-c.t)),
+                           st_makePoint(greatest(e.r,c.r),least(-e.b,-c.b))) as bbox
+from a join :s.entry_name e using (name_id)
+join c using (name_id)
+join catalogs.catalogs cat on (split_part(file_id,'-',1)=cat.ark)
+#+END_SRC
+
+#+RESULTS:
+| DROP MATERIALIZED VIEW |
+|------------------------|
+| SELECT 235601          |
+
+-06/28
+|------------------------|
+| SELECT 213816          |
+
+Now, we want a subset of that for our json file.
+
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create view :s.wine_search as
+with a as (
+ select page_ark,ark,page,
+ name,
+ year_published,
+ vintage,
+ 'wine' as type,
+ color,
+ country,
+ null as section,
+ null as bottle_type,
+ perprice,
+ caseprice,
+ st_asgeojson(bbox) as bbox
+ from :s.entries
+)
+ select a.*,c.name as title,
+ 'Sherry Wine & Spirits Co.,Inc.' as publisher,
+ c.year as publication_date
+ from a join catalogs.catalogs c using (ark);
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+#+BEGIN_SRC sql
+\set s eng_jane
+\COPY (select array_to_json(array_agg(row_to_json(j))) as json from eng_jane.wine_search j) to wine_search_entries.json- with csv quote '|'
+#+END_SRC
+
+#+RESULTS:
+| COPY 1 |
+|--------|
+
+To compare via names, we find the name_distance for every entry on the page, and pick the
+closest one.  This shows the closest entry to every point that we have in the
+crowd source.
+
+#+BEGIN_SRC sql
+\set s eng_jane_sample
+with a as (
+ select page_ark,xy,
+ name_id,
+ st_distance(st_makePoint(c.xy[1],c.xy[2]),e.left_side) as distance
+ from catalogs.crowd_source c join :s.entries e using (page_ark)
+),
+b as (
+ select *,
+ min(distance) over (partition by page_ark,xy) as min
+from a
+)
+select page_ark,xy,name_id,distance
+from b where distance=min;
+
+#+END_SRC
+
+#+RESULTS:
+| page_ark   | xy           | name_id        |         distance |
+|------------+--------------+----------------+------------------|
+| d79w2m-009 | {321,-2744}  | d79w2m-009_1_2 | 54.0370243444252 |
+| d79w2m-009 | {324,-4998}  | d79w2m-009_1_9 | 40.7921561087423 |
+| d79w2m-009 | {327,-4673}  | d79w2m-009_1_8 | 38.3275357934736 |
+| d79w2m-009 | {327,-4466}  | d79w2m-009_1_7 | 35.6931365951495 |
+| d79w2m-009 | {331,-4094}  | d79w2m-009_1_6 | 32.8937684067971 |
+| d79w2m-009 | {331,-3722}  | d79w2m-009_1_5 | 30.8706980808663 |
+| d79w2m-009 | {338,-3448}  | d79w2m-009_1_4 | 25.2388589282479 |
+| d79w2m-009 | {338,-3123}  | d79w2m-009_1_3 | 24.0831891575846 |
+| d79w2m-009 | {341,-2396}  | d79w2m-009_1_1 | 37.6430604494374 |
+| d79w2m-009 | {2116,-4814} | d79w2m-009_2_9 |                1 |
+| d79w2m-009 | {2116,-4606} | d79w2m-009_2_8 |                1 |
+| d79w2m-009 | {2116,-3846} | d79w2m-009_2_6 | 27.6586333718787 |
+| d79w2m-009 | {2119,-4161} | d79w2m-009_2_7 |                6 |
+| d79w2m-009 | {2119,-3495} | d79w2m-009_2_5 |               11 |
+| d79w2m-009 | {2122,-3163} | d79w2m-009_2_4 |               15 |
+| d79w2m-009 | {2126,-2925} | d79w2m-009_2_3 |               20 |
+| d79w2m-009 | {2129,-2664} | d79w2m-009_2_2 |               23 |
+| d79w2m-009 | {2133,-2359} | d79w2m-009_2_1 |               25 |
+
+Okay, so now we match names to our values, and when we have two matches on the
+same page, we pick the closest spatially.
+
+#+BEGIN_SRC sql
+  \set s eng_jane
+  create or replace view :s.vs_crowd_source as
+  with a as (
+   select
+   c.page_ark,
+   c.catalog_no,
+   e.name_id,
+   c.xy,
+   c.section,
+   c.name,
+   c.vintage,
+   c.perprice::decimal(6,2),
+   c.caseprice::decimal(6,2),
+   c.bottle_type,
+   c.type,
+   c.wine_type,
+   c.color,
+   c.country,
+   e.name as entry_name,
+   e.header_per_column,
+   e.price_per_column,
+   e.perprice::decimal(6,2) as entry_perprice,
+   e.caseprice::decimal(6,2) as entry_caseprice,
+   e.country as entry_country,
+   e.vintage as entry_vintage,
+   e.color as entry_color,
+   e.producer as entry_producer,
+   e.variety as entry_variety,
+   e.region as entry_region,
+   e.province as entry_province,
+   e.left_side as entry_left_side,
+   abs(e.perprice-c.perprice)*10 as per_dis,
+   abs(e.perprice-c.perprice)*10 as case_dis,
+   st_distance(st_makePoint(xy[1],xy[2]),e.left_side) as xy_dis,
+   levenshtein(UPPER(substring(c.name,1,100)),UPPER(substring(e.name,1,100))) as name_dis,
+   abs(e.perprice-c.perprice)*10 + abs(e.perprice-c.perprice)*10 as score
+   from catalogs.crowd_source c
+   join :s.entries e using (page_ark)
+   ),
+  b as (
+   select name_id,xy,xy_dis,score,
+   min(xy_dis) OVER (partition by xy) as xy_min,
+   min(xy_dis) OVER (partition by name_id) as name_id_min
+   from a
+  ),
+  c as (
+   select b.*,
+   min(score) OVER (partition by name_id) as min_score
+   from b where xy_min=name_id_min and xy_dis=xy_min
+  ),
+  e as (
+  select
+ name_id,xy,page_ark,catalog_no,
+ section,name,vintage,perprice,caseprice,
+ bottle_type,type,wine_type,
+ color,country,
+ entry_name,
+ entry_perprice,entry_caseprice,
+ entry_country,entry_vintage,entry_color,
+ entry_variety,entry_region,entry_province,
+ name_dis::integer,a.xy_dis::integer,
+ score
+   from a join c using (name_id,xy,score)
+  )
+  select * from e;
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+#+BEGIN_SRC sql
+  \set s eng_jane
+  create or replace view :s.vs_crowd_source_summary as
+  with a as (
+   select name_id,
+   perprice=entry_perprice as per_match,
+   caseprice=entry_caseprice as case_match,
+   lower(name)=lower(entry_name) as name_match,
+   lower(country)=lower(entry_country) as country_match,
+   lower(color)=lower(entry_color) as color_match
+   from eng_jane.vs_crowd_source
+  )
+  select
+   (1.0*sum(case when (per_match) then 1 else 0 end)/count(*))::decimal(4,2) as per,
+   (1.0*sum(case when (case_match) then 1 else 0 end)/count(*))::decimal(4,2) as case,
+   (1.0*sum(case when (name_match) then 1 else 0 end)/count(*))::decimal(4,2) as name,
+   (1.0*sum(case when (country_match) then 1 else 0 end)/count(*))::decimal(4,2) as country,
+   (1.0*sum(case when (color_match) then 1 else 0 end)/count(*))::decimal(4,2) as color
+  from a
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create or replace view :s.vs_crowd_source_old as
+with a as (
+ select
+ e.name_id,
+ c.*,
+ e.name as entry_name,
+ e.header_per_column,
+ e.price_per_column,
+ e.perprice as entry_perprice,
+ e.caseprice as entry_caseprice,
+ e.country as entry_country,
+ e.vintage as entry_vintage,
+ e.color as entry_color,
+ e.producer as entry_producer,
+ e.variety as entry_variety,
+ e.region as entry_region,
+ e.province as entry_province,
+ e.left_side as entry_left_side,
+ levenshtein(UPPER(substring(c.name,1,100)),UPPER(substring(e.name,1,100))) as name_dis
+ from catalogs.crowd_source c
+ join :s.entries e using (page_ark)
+ ),
+ b as (
+ select *,min(name_dis) over (partition by xy) as name_min
+ from a
+),
+d as (
+ select *,
+ st_distance(st_makePoint(xy[1],xy[2]),entry_left_side) as xy_dis,
+ min(st_distance(st_makePoint(xy[1],xy[2]),entry_left_side)) OVER (partition by xy) as xy_min
+ from b
+ where name_dis=name_min
+),
+e as (
+select
+ name_id,xy,page_ark,catalog_no,
+ section,name,vintage,perprice,caseprice,
+ bottle_type,type,wine_type,
+ color,country,
+ entry_name,
+ entry_perprice,entry_caseprice,
+ entry_country,entry_vintage,entry_color,
+ entry_variety,entry_region,entry_province,
+ name_dis::integer,xy_dis::integer
+ from d where xy_dis=xy_min
+),
+f as (
+select
+ name_id,
+ min(name_dis) as name_name_min,
+ min(xy_dis) as name_xy_min
+ from e
+ group by name_id
+)
+select e.* from e join f on (e.name_id=f.name_id and e.xy_dis=f.name_xy_min );
+
+create or replace view :s.vs_crowd_source_summary_old as
+with a as (
+ select name_id,
+ perprice=entry_perprice as per_match,
+ caseprice=entry_caseprice as case_match,
+ lower(name)=lower(entry_name) as name_match,
+ lower(country)=lower(entry_country) as country_match,
+ lower(color)=lower(entry_color) as color_match
+ from eng_jane.vs_crowd_source_old
+)
+select
+ (1.0*sum(case when (per_match) then 1 else 0 end)/count(*))::decimal(4,2) as per,
+ (1.0*sum(case when (case_match) then 1 else 0 end)/count(*))::decimal(4,2) as case,
+ (1.0*sum(case when (name_match) then 1 else 0 end)/count(*))::decimal(4,2) as name,
+ (1.0*sum(case when (country_match) then 1 else 0 end)/count(*))::decimal(4,2) as country,
+ (1.0*sum(case when (color_match) then 1 else 0 end)/count(*))::decimal(4,2) as color
+from a;
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+| CREATE VIEW |
+
+
+*** DSI Truth tables
+
+The truth tables from DSI aren't quite so easy to use.  When the rows don't line
+up, then things really go to hell.  Also, these examples show that I really
+don't understand the difference between the price_raw and price_new values in
+the price table.
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create or replace view :s.vs_dsi as
+select p.entry_id,t.page_ark,x.file,t.cluster,t.row,t.text_true,
+ p.price_true,p.price_raw,p.type_new,p.price_new
+from dsi.dsi_truth t
+join fix.xwalk x using (page_ark)
+left join :s.price_name p
+on (p.file_id=t.page_ark and p.cluster=t.cluster and p.row=t.row)
+order by page_ark,cluster,row;
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+I added in a program, test-one.sh, that will run the tests on a single page.
+This is a good way to test various pages.  To do all the pages with DSI truth,
+you can use the test below.   Jane updated the code, (and truth tables) to
+improve the comparison of these two.
+
+#+BEGIN_SRC bash
+test='d71s3g-002 d7259v-006 d7259v-012 d72g6t-006 d7301d-004 d7459g-022 d74k53-011
+d75c73-008 d76k5q-011 d79w2m-006 d79w2m-009 d79w2m-025 d7b01k-002 d7c01w-008 d7dk5k-026
+d7dw2j-007 d7js34-015 d7kk54-024 d7kk54-043 d7m59t-006 d7ms3r-025 d7nc7f-018 d7np4d-001
+d7p30b-005 d7p883-009 d7pp4q-040 d7ps3c-026 d7qp41-005 d7rg61-024 d7sg6b-006 d7tg71-011
+d7wg68-001 d7x30h-004 d7xw26-063 d7xw26-065 d7zc77-002'
+for i in $test; do
+  echo $i
+done
+#+END_SRC
+
+In addition to that, Justin has a script that runs just the catalogs that have
+some PTV truth tables associated with them.  These are identified below, and can
+be extracted like:
+
+#+BEGIN_SRC bash
+catalog_test='D-202/d70w2t D-005/d79w2m D-005/d7ps3c D-005/d72013 D-005/d7z30t
+       D-005/d7v88n D-005/d7b01k D-005/d77p4p D-005/d73s33 D-005/d7mw2d
+       D-005/d7j01f D-005/d7k01r D-005/d7sg6b D-005/d73w2r D-005/d7101s
+       D-005/d76k5q D-005/d70597 D-005/d7f598 D-005/d78g6p D-005/d7c889
+       D-005/d7ms3r D-005/d7vc79 D-005/d7qp41 D-005/d7kw23 D-005/d7w88z
+       D-005/d7g59k D-005/d7pp4q D-005/d7s881 D-005/d7bc7n D-005/d7g01t
+       D-005/d72s3s D-005/d76p4c D-005/d7tg6n D-005/d7d59z D-005/d7h014
+       D-005/d74s3d D-005/d7b880 D-202/d7qs3p D-202/d7001g D-202/d7ds3w
+       D-202/d7ws37 D-202/d7pk52 D-202/d7388t D-202/d7988p D-202/d75k5d
+       D-202/d7h59w D-202/d7js34 D-202/d71s3g D-202/d7x30h D-202/d75p42
+       D-202/d7nk5'
+for i in catalog_test; do
+  [[ -d $i ]] || mkdir -p $i;
+  gsutil rsync -r gs://sloan-ocr/$i sloan-ocr/$i
+done
+
+#+END_SRC
+
+* SQL Functions
+** Helper Functions
+CREATE OR REPLACE FUNCTION isnumeric(text) RETURNS BOOLEAN AS $$
+DECLARE x NUMERIC;
+BEGIN
+    x = $1::NUMERIC;
+    RETURN TRUE;
+EXCEPTION WHEN others THEN
+    RETURN FALSE;
+END;
+$$
+STRICT
+LANGUAGE plpgsql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION public.trim_space(text) RETURNS TEXT AS $$
+select regexp_replace(regexp_replace($1,'^\s*(.*?)\s*$','\1'),'\s+',' ','g');
+$$ STRICT LANGUAGE SQL IMMUTABLE
+
+** Wine Functions
+
+#+BEGIN_SRC sql
+\set s eng_jane
+
+create materialized view :s.vintages_from_text as
+with a as (
+ select distinct name_id,
+ regexp_matches(trim_space(text_raw),'\m(1[89]\d\d|20\d\d)\M','g') as year
+ from :s.entry_name
+)
+select
+name_id,
+array_agg(year[1] order by year[1]) as vintages
+from a group by name_id;
+
+create materialized view :s.prices_in_text as
+with a as (
+ select distinct name_id,
+ regexp_matches(trim_space(text_raw),'\m[.$]?(\d*\.\d\d)\M','g') as price
+ from :s.entry_name
+)
+select
+name_id,
+array_agg(price[1] order by price[1]) as prices
+from a group by name_id;
+
+#+END_SRC
+
+#+RESULTS:
+| SELECT 96233 |
+|--------------|
+| SELECT 16346 |
+
+06/28
+| SELECT 87633 |
+|--------------|
+| SELECT 38042 |
+
+#+BEGIN_SRC sql
+CREATE OR REPLACE FUNCTION public.years_in_text(text) RETURNS integer[]  AS $$
+with a as (
+ select distinct regexp_matches(trim_space($1),'\m(1[89]\d\d|20\d\d)\M','g') as year
+)
+select array_agg(year[1]::integer order by year[1]::integer) as years
+from a;
+$$ STRICT LANGUAGE sql IMMUTABLE;
+#+END_SRC
+
+#+RESULTS:
+| CREATE FUNCTION |
+|-----------------|
+
+
+* Ancillary Datasets
+
+VIVC Varietals
+
+#+BEGIN_SRC sql
+create table ancil.vivc_color(
+code text,
+color text references catalogs.wine_color
+);
+
+insert into ancil.vivc_color(code,color)
+select * from
+(VALUES
+('B','White'),
+('N','Red'),
+('Rs','Rosé'),
+('R','Red'),
+('G','White'),
+('Rg','Red'),
+('RS','Rosé')
+) as c(code,color);
+#+END_SRC
+
+#+RESULTS:
+| INSERT 0 7 |
+|------------|
+
+#+BEGIN_SRC
+
+create table ancil.vivc (
+vivc_id serial primary key,
+country text,
+variety text,
+synonym text,
+vivc_code text,
+updated date
+);
+
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE TABLE |
+|--------------|
+
+#+BEGIN_SRC sql
+\COPY ancil.vivc(country,variety,synonym,vivc_code,updated) from data/vivc-varietals.csv with csv header delimiter ';'
+
+#+END_SRC
+#+RESULTS:
+| COPY 13277 |
+|------------|
+
+#+BEGIN_SRC sql
+create view ancil.vivc_variety as
+with a as (
+ select vivc_id,regexp_match(variety,'(.*?)\s(B|N|Rs|R|G|Rg|RS)?\s*$') as w
+ from ancil.vivc
+),
+b as (
+ select w[1] as variety,w[2] as color,vivc_id
+ from a
+)
+select
+b.variety,
+array_agg(color) as colors,
+array_agg(country) as countries
+from b join ancil.vivc using (vivc_id)
+group by b.variety;
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+#+BEGIN_SRC sql
+create or replace view ancil.color_from_variety as
+with a as (
+ select variety,'white' as color
+ from ancil."in" where description ~* '\swhite(\swine|\.)'
+union all
+ select variety,'red' as color
+ from ancil."in" where description ~* '\sred(\swine|\.)'
+union all
+ select variety,'rose' as color
+ from ancil."in" where description ~* '\srose(\swine|\.)'
+ union all select variety,'rosé' as color
+ from ancil."in" where description ~* '\sRosé(\swine|\.)'),
+b as (
+ select variety,color,count(*)
+ from a group by 1,2
+ order by 1,2
+%)
+select
+ variety,
+ array_agg(color order by count desc) as color
+from b
+group by variety;
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+
+* Presentation Outputs
+
+
+** Example Page
+
+This is the example page for our champagne example
+
+#+BEGIN_SRC sql
+\COPY (select name,vintage,perprice::decimal(6,2),caseprice::decimal(6,2),producer,country from eng_jane.entries where page_ark='d7pp4q-023' and st_x(ul) < 1000 order by st_y(ul) desc limit 5) to champagne_example.csv with csv header
+#+END_SRC
+
+#+RESULTS:
+| COPY 5 |
+|--------|
+
+
+** Count Summary
+#+BEGIN_SRC sql
+select 'country' as type,count(*) from (select distinct country from eng_jane.entries) as c
+union
+select 'province' as type,count(*) from (select distinct province from eng_jane.entries) as c
+union
+select 'region' as type,count(*) from (select distinct region from eng_jane.entries) as c
+union
+select 'variety' as type,count(*) from (select distinct country from eng_jane.entries) as c
+order by 2 asc;
+#+END_SRC
+
+#+RESULTS:
+| type     | count |
+|----------+-------|
+| variety  |    32 |
+| country  |    32 |
+| province |   138 |
+| region   |   509 |
+
+
+** Examples by Country
+
+Here we show the countries represented along with the missing ones.
+
+#+BEGIN_SRC sql
+\COPy (select country,count(*) from eng_jane.entries group by 1 order by count desc) to by_country.csv with csv header
+#+END_SRC
+
+#+RESULTS:
+| COPY 32 |
+|---------|
+
+
+** Whisker Plots
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create or replace view :s.yearly_whisker as
+with a as (
+ select split_part(page_ark,'-',1) as ark,
+ perprice,caseprice from :s.entries
+),
+per as(
+ select year,
+ count(*),
+ (array_whisker(array_agg(perprice::numeric))).*
+ from a join catalogs.catalogs using (ark)
+ where perprice is not null
+ group by year order by year
+),
+c as(
+ select year,
+ count(*),
+ (array_whisker(array_agg(caseprice::numeric))).*
+ from a join catalogs.catalogs using (ark)
+ where caseprice is not null
+ group by year order by year
+)
+select
+ year, per.count as per_count,
+ per.min as per_min,per.q1 as per_q1,
+ per.median as per_median,per.q3 as per_q3,per.qx as per_qx,
+ c.count as case_count,
+ c.min as case_min,c.q1 as case_q1,
+ c.median as case_median,c.q3 as case_q3,c.qx as case_qx
+ from per join c using (year)
+ order by year;
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+#+BEGIN_SRC sql
+\COPY (select * from eng_jane.yearly_whisker) to eng_jane_yearly_whisker.csv with csv header
+#+END_SRC
+
+#+RESULTS:
+| COPY 67 |
+|---------|
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create or replace view :s.yearly_combined_whisker as
+with a as (
+ select split_part(page_ark,'-',1) as ark,
+ perprice as price
+ from :s.entries
+ where perprice is not null and perprice > 0
+ union
+ select split_part(page_ark,'-',1) as ark,
+ caseprice/12.0 as price
+ from :s.entries
+ where caseprice is not null and caseprice >0
+),
+per as(
+ select year,
+ count(*),
+ (array_whisker(array_agg(price::numeric))).*
+ from a join catalogs.catalogs using (ark)
+ group by year
+)
+select
+ year, per.count as count,
+ per.min as min,per.q1 as q1,
+ per.median as median,per.q3 as q3,per.qx as qx
+ from per
+ order by year;
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+#+BEGIN_SRC sql
+\COPY (select * from eng_jane.yearly_combined_whisker) to eng_jane_yearly_combined_whisker.csv with csv header
+#+END_SRC
+
+#+RESULTS:
+| COPY 67 |
+|---------|
+
+
+** Flags
+
+Stan's code identifies a number of flags in his code.  We can extract those as;
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create or replace view :s.sflags as
+with a as (
+ select name_id,trim(both from unnest(string_to_array(inspect,';'))) as flag from :s.entry_name
+)
+select name_id,regexp_replace(flag,'multiple countries.*','multiple countries') as flag
+from a
+where flag is not null and flag != ''
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+Jane's flags are in the entry_price table, and include:
+flag_order,flag_ratio,flag_amount,flag_format,flag_digit,flag_raw_year,flag_type_new from :s.entry_price ;
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create or replace view :s.jflags as
+--select name_id,'Price order' as flag from :s.entry_price where flag_order is true
+--union
+select name_id,'Price format' as flag from :s.entry_price where flag_format is true
+union
+select name_id,'Price is year' as flag from :s.entry_price where flag_raw_year is true
+union
+select name_id,'Price type' as flag from :s.entry_price where flag_type_new is true;
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+My Flags include; too many columns, outlier prices, and case/per mismatch
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create or replace view :s.qflags as
+with a as (
+ select name_id,caseprice/perprice as ratio
+ from :s.entries
+ where caseprice is not null
+)
+select name_id,'Price many columns'
+from :s.entries where array_length(price_per_column,1) > 2
+union
+select name_id,'Case price high' from a where ratio > 24
+union
+select name_id,'Case is split' from a where ratio <25 and ratio > 13
+union
+select name_id,'Case is magnum' from a where ratio < 7 and ratio > 4
+union
+select name_id,'Case price low' from a where ratio <4
+union
+select name_id,'Price per outlier (high)'
+from :s.entries e join :s.yearly_whisker w on (e.year_published=w.year) where perprice > w.per_qx
+union
+select name_id,'Price case outlier (high)'
+from :s.entries e join :s.yearly_whisker w on (e.year_published=w.year) where caseprice > w.case_qx
+union
+select name_id,'Price case outlier (low)'
+from :s.entries e join :s.yearly_whisker w on (e.year_published=w.year) where caseprice < w.case_q1;
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create materialized view :s.flags as
+select * from :s.jflags
+union
+select * from :s.sflags
+union
+select * from :s.qflags;
+#+END_SRC
+
+#+RESULTS:
+| SELECT 317089 |
+|---------------|
+
+#+BEGIN_SRC sql
+\set s eng_jane
+create or replace view :s.flag_score
+as select * from (VALUES
+('Case is magnum%',50),
+('Case is split%',50),
+('Case price high%',50),
+('Case price low%',50),
+('multiple countries%',10),
+('Price case outlier (high)%',50),
+('Price case outlier (low)%',50),
+('Price format%',20),
+('Price is year%',20),
+('Price many columns%',100),
+('Price order%',30),
+('Price per outlier (high)%',50),
+('Price type%',10),
+('producer (decent%',10),
+('producer (submatch%',20),
+('province (decent%',10),
+('province (submatch%',20),
+('region (decent%',10),
+('region (submatch%',20),
+('variety (decent%',10),
+('variety (submatch%',20)) as v(pat,score);
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+#+BEGIN_SRC sql
+\COPY (with a as (select count(*) from eng_jane.entries),b as (select flag,count(*) from eng_jane.flags group by flag) select flag,(100*(1.0*b.count/a.count))::integer as percentage from a,b order by b.count desc) to flags.csv with csv header
+#+END_SRC
+
+#+RESULTS:
+| COPY 36 |
+|---------|

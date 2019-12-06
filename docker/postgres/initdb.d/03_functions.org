@@ -1,0 +1,101 @@
+** Functions
+#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
+
+*** Crowd source Functions
+
+There are a number of functions that we need in order to run the crowd_source
+tool.  These help get data from the system for metrics, and also help o
+
+First, datafest.page is missing page_ark let's fix that
+
+#+BEGIN_SRC sql
+CREATE function page_ark (in datafest.page, out varchar)
+LANGUAGE SQL IMMUTABLE AS $$
+SELECT regexp_replace($1.page_id,'.*/(.*).jpg','\1');
+$$
+#+END_SRC
+
+#+RESULTS:
+| CREATE FUNCTION |
+|-----------------|
+
+
+**** Next Page
+
+We want to preferentially choose certain pages over others.  This is so we focus
+our crowd sourcing data on the pages that need the most TLC.  Here are some
+constraints:
+
+- Preferentially, choose pages with lots of automatic marks :: For prices, the
+     more prices mean better probability, but we need to make sure that the
+     pages exist in both the DAMS, and in the tesseract pages.
+
+- Choose pages that haven't been visited much yet :: Actually for our example,
+     we probably want to see more people visit the same page, so maybe we don't
+     want to include this just yet.
+
+- Choose pages that haven't been marked as complete ::  We don't have a complete
+     page marker write now. Maybe we need to add a [] to the form, where users
+     can say no prices here?
+
+- Don't revist pages for a particular user.
+
+
+
+#+BEGIN_SRC sql
+create materialized view datafest.page_price_p as
+with a as (
+ select t.ark as page_ark
+ from tesseract.pages t
+ join datafest.page p on (t.ark=p.page_ark)
+),
+b as (
+ select page_ark,count(*)
+ from wine_search.prices
+ join a using (page_ark)
+ group by page_ark
+),
+c as (
+ select sum(count)
+ from b
+),
+d as (
+ select
+ page_ark,
+ case when (b is null) then 1000.0/c.sum else b.count*1000.0/c.sum end as prob
+ from a
+ left join b using (page_ark),c
+)
+select
+ page_ark,
+ prob,
+ sum(prob) OVER (order by page_ark RANGE UNBOUNDED PRECEDING) as cum
+ from d;
+
+grant select on datafest.page_price_p to public;
+#+END_SRC
+
+#+RESULTS:
+| SELECT 7221 |
+|-------------|
+
+#+BEGIN_SRC sql
+CREATE function datafest.next_page()
+RETURNS varchar
+LANGUAGE SQL AS $$
+with a as (
+ select random()*max(cum) as p from datafest.page_price_p
+)
+select page_ark
+from page_price_p,a
+where cum>a.p
+order by cum
+limit 1
+$$
+
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE FUNCTION |
+|-----------------|

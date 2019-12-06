@@ -1,0 +1,128 @@
+** Existing Marks
+#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
+
+We do want to save marks from current sets.  For now, we'll just include those
+directly here.  If we restart, for example, we can add more
+
+This first set came from the pre-section version...
+
+#+BEGIN_SRC sql
+copy datafest.mark(mark_id,page_id,user_id,type,implicator_top,implicator_left,implicator_bottom,implicator_right,region_top,region_left,region_bottom,region_right,wine_type,bottle_type,color,vintage,country,bottle_price,case_price)
+from stdin with csv header;
+mark_id,page_id,user_id,type,implicator_top,implicator_left,implicator_bottom,implicator_right,region_top,region_left,region_bottom,region_right,wine_type,bottle_type,color,vintage,country,bottle_price,case_price
+3aeba578-d88c-4efc-ac08-a11acc3f5b30,/collection/sherry-lehmann/D-202/d7w306/media/images/d7w306-010.jpg,quinn,country,416,348,1564,1536,2152,372,4640,1604,,,,,France,,
+8845410e-dfc2-49d3-85e9-498ac0f6b921,/collection/sherry-lehmann/D-637/d7dw8t/media/images/d7dw8t-016.jpg,quinn,bottle_type,661,516,793,812,741,240,2885,1120,,Magnum,,,,,
+c9c5f600-db4b-42ec-ae11-c53060515a1e,/collection/sherry-lehmann/D-637/d7rq1j/media/images/d7rq1j-023.jpg,quinn,color,1680,2144,1840,2716,368,3112,3220,5872,,,white,,,,
+1f38de01-d85f-4f12-9792-49835c5b8c46,/collection/sherry-lehmann/D-637/d7dw8t/media/images/d7dw8t-016.jpg,quinn,country,181,1904,357,2472,373,192,3109,2896,,,,,France,,
+9a94ce74-70c7-4d89-b818-697fad890c84,/collection/sherry-lehmann/D-637/d7cw74/media/images/d7cw74-010.jpg,quinn,country,469,3788,129,5196,3113,3100,397,5824,,,,,france,,
+3991b25c-9fa0-4f83-bee2-b38f7d306d93,/collection/sherry-lehmann/D-637/d7g65d/media/images/d7g65d-007.jpg,quinn,vintage,1521,1568,1397,1756,2749,1456,1389,2732,,,,2010,,,
+2918a67f-cffb-4951-af6e-738f90401b26,/collection/sherry-lehmann/D-005/d72g6t/media/images/d72g6t-006.jpg,quinn,vintage,3192,260,2988,1080,4120,232,3288,3624,,,,1955,,,
+f3d44bf9-b417-4017-a54a-2f08bd2f519e,/collection/sherry-lehmann/D-637/d71d3p/media/images/d71d3p-004.jpg,quinn,vintage,424,968,104,2272,5784,296,104,3416,,,,1971,,,
+a842687a-9a99-492e-86be-f2cce6c51691,/collection/sherry-lehmann/D-005/d72g6t/media/images/d72g6t-006.jpg,quinn,vintage,816,224,600,1424,2992,104,784,3648,,,,1959,,,
+680959d7-abd7-4bd9-8ffd-bb5edb4816cd,/collection/sherry-lehmann/D-637/d7h07d/media/images/d7h07d-019.jpg,quinn,color,369,440,125,2920,2981,168,269,2908,,,red,,,,
+74a4b6df-27ec-4804-a90d-1ce457fee385,/collection/sherry-lehmann/D-637/d7h07d/media/images/d7h07d-019.jpg,quinn,vintage,1393,244,1213,536,3025,168,1401,1096,,,,1955,,,
+730a6f30-e978-497c-8e4a-21695c5f03c2,/collection/sherry-lehmann/D-637/d71d3p/media/images/d71d3p-004.jpg,quinn,color,320,1016,128,2288,5848,176,328,3472,,,red,,,,
+b72f8114-edf9-4b98-afa1-cf7d949d9e0d,/collection/sherry-lehmann/D-637/d7h07d/media/images/d7h07d-019.jpg,quinn,color,341,3088,161,5640,3145,3064,349,5820,,,white,,,,
+7a4cadb0-342c-4996-bde2-a85494ccacd8,/collection/sherry-lehmann/D-637/d7cw74/media/images/d7cw74-010.jpg,quinn,country,429,692,149,2540,3125,204,373,3000,,,,,italy,,
+4094f853-5593-4c65-9f43-ba8e90dac591,/collection/sherry-lehmann/D-202/d74s4s/media/images/d74s4s-015.jpg,quinn,vintage,2196,608,1988,2280,2588,528,1960,3592,,,,1965,,,
+5342c9fa-7cde-48a0-a65e-550ae7e051ea,/collection/sherry-lehmann/D-637/d7cw74/media/images/d7cw74-010.jpg,quinn,color,1005,236,905,568,1637,172,425,1132,,,red,,,,
+d9e88a17-f116-444a-856d-b8ab4c841dc3,/collection/sherry-lehmann/D-637/d7g65d/media/images/d7g65d-007.jpg,quinn,vintage,261,3000,97,3692,2581,2900,141,4216,,,,2009,,,
+fa1486bc-9a6f-4082-bc80-97f043c71c2e,/collection/sherry-lehmann/D-637/d7cw74/media/images/d7cw74-010.jpg,quinn,color,545,1148,441,1540,1617,1128,565,1952,,,red,,,,
+11db0227-ad19-4e30-bdcf-efadd440c81e,/collection/sherry-lehmann/D-202/d74s4s/media/images/d74s4s-015.jpg,quinn,vintage,2700,608,2544,2252,5324,600,2736,3548,,,,1964,,,
+ffc5eab2-b812-4d1e-9f9f-d07d85cb9c08,/collection/sherry-lehmann/D-637/d7cw74/media/images/d7cw74-010.jpg,quinn,color,549,2036,457,2468,1185,2040,405,2904,,,red,,,,
+860acf08-f74d-4412-b3d9-6abc2da1b983,/collection/sherry-lehmann/D-637/d7cw74/media/images/d7cw74-010.jpg,quinn,color,1593,2044,1469,2432,3109,1984,1461,2916,,,white,,,,
+8c21f9d4-0b29-4059-bc57-3c0226d115d2,/collection/sherry-lehmann/D-637/d7cw74/media/images/d7cw74-010.jpg,quinn,color,1345,3108,1177,3512,3057,3068,1061,4052,,,white,,,,
+5541db82-f15f-49ed-bd10-7a790cb7bcd8,/collection/sherry-lehmann/D-637/d7g65d/media/images/d7g65d-007.jpg,quinn,wine_type,1677,148,1369,1424,2613,160,157,2448,still,,,,,,
+f3eb9faa-3d16-451d-8680-32ac933eccaf,/collection/sherry-lehmann/D-637/d7g65d/media/images/d7g65d-007.jpg,quinn,color,1781,176,1645,896,2673,92,1725,1432,,,red,,,,
+0f67bcd9-04da-4602-b6c1-5c13fa80179a,/collection/sherry-lehmann/D-637/d7g65d/media/images/d7g65d-007.jpg,quinn,color,1533,1524,1349,2200,2697,1444,1441,2712,,,red,,,,
+9f954e73-bdca-4ba0-8628-2b892e6f7245,/collection/sherry-lehmann/D-637/d7g65d/media/images/d7g65d-007.jpg,quinn,country,1701,160,1409,1388,2745,120,1329,2776,,,,,France,,
+0bcbb78a-8d33-4865-8dc9-3c5775e9f473,/collection/sherry-lehmann/D-637/d7g65d/media/images/d7g65d-007.jpg,quinn,country,1689,224,1353,1352,2801,2864,49,5544,,,,,France,,
+533c02ae-41b2-4cc0-8e82-1747c9e9f1ee,/collection/sherry-lehmann/D-637/d7g65d/media/images/d7g65d-007.jpg,quinn,vintage,1785,260,1649,920,2661,120,1625,1424,,,,2010,,,
+180fc6d6-dbe7-431c-b448-483ffaaa9429,/collection/sherry-lehmann/D-637/d7rq1j/media/images/d7rq1j-023.jpg,quinn,country,140,2000,468,4912,108,160,3220,5864,,,,,usa,,
+8ecc3626-160e-429e-9a4b-b8950487b7a0,/collection/sherry-lehmann/D-202/d73k5s/media/images/d73k5s-005.jpg,quinn,country,684,1344,936,2492,584,208,5240,3832,,,,,France,,
+dd5ea10e-c88a-4805-80ac-2a5a7c36bbd7,/collection/sherry-lehmann/D-637/d7rq1j/media/images/d7rq1j-023.jpg,quinn,color,2212,172,2360,980,2380,132,3124,1040,,,red,,,,
+918a09d9-ffbe-43c0-97ce-4cbf58141828,/collection/sherry-lehmann/D-202/d73k5s/media/images/d73k5s-005.jpg,quinn,vintage,1076,396,1248,888,1008,336,5036,2100,,,,1977,,,
+2eae4590-fe11-4032-859e-aa84d6542aa9,/collection/sherry-lehmann/D-637/d7rq1j/media/images/d7rq1j-023.jpg,quinn,color,2188,176,2360,1016,1616,1084,3068,1972,,,red,,,,
+0951d0c3-8ea4-48eb-80aa-30554e005d67,/collection/sherry-lehmann/D-637/d7rq1j/media/images/d7rq1j-023.jpg,quinn,color,2180,196,2348,972,380,2012,1696,2948,,,red,,,,
+c11c57df-3cf2-4278-a31f-281e537b5f1a,/collection/sherry-lehmann/D-637/d7rq1j/media/images/d7rq1j-023.jpg,quinn,color,1656,2152,1844,2708,1756,2016,3200,2944,,,white,,,,
+66fada16-76fa-422f-a5d1-69662cec75c3,/collection/sherry-lehmann/D-202/d73k5s/media/images/d73k5s-005.jpg,quinn,vintage,1004,2200,1228,3056,1048,2132,4444,3740,,,,1977,,,
+50bda061-2466-4711-ae02-77e0fb807a95,/collection/sherry-lehmann/D-202/d73k5s/media/images/d73k5s-005.jpg,quinn,color,684,1436,1004,2668,612,184,5080,3816,,,red,,,,
+0aa9c071-f9b6-48de-abe0-005b03bbfc0e,/collection/sherry-lehmann/D-202/d7w306/media/images/d7w306-010.jpg,quinn,color,220,1628,2052,3812,2084,1700,5596,3840,,,white,,,,
+5833006e-374c-4215-9e1f-94f8f7bb9022,/collection/sherry-lehmann/D-202/d7w306/media/images/d7w306-010.jpg,quinn,color,4252,732,4408,1216,4336,448,4648,1564,,,rosé,,,,
+f8f2e690-8e59-45ff-9da1-9b6267e47f55,/collection/sherry-lehmann/D-202/d7w306/media/images/d7w306-010.jpg,quinn,country,4580,612,4704,1360,4684,444,5052,1596,,,,,italy,,
+bcda0093-2ec8-40af-8f30-564952456073,/collection/sherry-lehmann/D-202/d7w306/media/images/d7w306-010.jpg,quinn,color,3556,528,3716,1476,3592,368,4340,1560,,,red,,,,
+53338ef1-1615-4b2c-a159-8a8319772d92,/collection/sherry-lehmann/D-202/d7w306/media/images/d7w306-010.jpg,quinn,color,3256,512,3380,1436,3264,424,3624,1564,,,white,,,,
+633e6544-0425-43f3-bf6a-2e982fdc88e1,/collection/sherry-lehmann/D-202/d7w306/media/images/d7w306-010.jpg,quinn,color,3016,552,3168,1356,3060,456,3304,1528,,,red,,,,
+44cd2c69-5ba1-43f2-bae8-e24dfbeacf8e,/collection/sherry-lehmann/D-202/d7w306/media/images/d7w306-010.jpg,quinn,color,2272,600,2412,1368,2384,408,2608,1540,,,red,,,,
+8d702937-50fa-4215-ab96-28c1e4a375ab,/collection/sherry-lehmann/D-202/d7xk57/media/images/d7xk57-010.jpg,quinn,color,736,536,1008,1580,1060,348,5232,3568,,,white,,,,
+6f0af5b3-8031-4094-9851-636eab3e41d6,/collection/sherry-lehmann/D-637/d7hs93/media/images/d7hs93-025.jpg,quinn,country,222,3256,436,5624,236,3086,3202,5884,,,,,usa,,
+f0bc2c7d-c8f5-404e-b727-1164aaaa8ca6,/collection/sherry-lehmann/D-637/d7hs93/media/images/d7hs93-025.jpg,quinn,country,422,212,488,632,428,192,2212,1144,,,,,new zealand,,
+583ff208-0fdd-4e66-a436-318aa06f4797,/collection/sherry-lehmann/D-637/d7hs93/media/images/d7hs93-025.jpg,quinn,country,2206,228,2378,1094,2342,172,3100,1150,,,,,Portugal,,
+1d1efdbf-d806-4cfa-bc27-993030f99a02,/collection/sherry-lehmann/D-637/d7hs93/media/images/d7hs93-025.jpg,quinn,country,436,1130,586,1980,570,1118,3002,2032,,,,,Spain,,
+06b71e9f-83f1-4cac-8840-d6827fa0e12c,/collection/sherry-lehmann/D-637/d7hs93/media/images/d7hs93-025.jpg,quinn,country,412,1114,614,1974,372,2030,3034,2924,,,,,Spain,,
+614b909c-a8ff-41be-953d-c9615a1c00ca,/collection/sherry-lehmann/D-637/d7hs93/media/images/d7hs93-025.jpg,quinn,color,434,3130,582,3978,340,3054,3150,5848,,,red,,,,
+606799dc-8989-443a-b98b-5a9165352610,/collection/sherry-lehmann/D-637/d7hs93/media/images/d7hs93-025.jpg,quinn,wine_type,434,3162,600,3952,394,3108,3146,5854,still,,,,,,
+\.
+
+#+END_SRC
+
+#+RESULTS:
+| COPY 52 |
+|---------|
+
+And this came from a post-section local try
+#+BEGIN_SRC sql
+copy datafest.mark(mark_id,page_id,user_id,type,implicator_top,implicator_left,implicator_bottom,implicator_right,region_top,region_left,region_bottom,region_right,section_title,wine_type,bottle_type,color,vintage,country,bottle_price,case_price
+)
+from stdin with csv header;
+mark_id,page_id,user_id,type,implicator_top,implicator_left,implicator_bottom,implicator_right,region_top,region_left,region_bottom,region_right,section_title,wine_type,bottle_type,color,vintage,country,bottle_price,case_price
+67c00f02-b729-4097-b6c4-9ba618f1ce1b,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,color,2138,3038,2274,4054,2308,3082,2628,5016,,,,white,,,,
+d546b0f9-dd87-42b4-8064-5192ac063242,/collection/sherry-lehmann/D-637/d7x65f/media/images/d7x65f-007.jpg,quinn,section_title,192,180,464,5556,104,28,3496,5788,French Champagne,,,,,,,
+dd119c5a-6feb-4a23-acac-8151ad75bd52,/collection/sherry-lehmann/D-637/d7x65f/media/images/d7x65f-007.jpg,quinn,country,204,124,428,5500,152,52,3468,5788,,,,,,France,,
+45601f5c-2f3f-46db-b2b7-93b83815b8b5,/collection/sherry-lehmann/D-637/d7x65f/media/images/d7x65f-007.jpg,quinn,wine_type,188,168,496,5568,188,96,3504,5804,,sparkling,,,,,,
+e0856b10-affd-4c40-9bd6-266c7083bd8a,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,color,3064,3066,3230,3974,3146,3014,3700,5112,,,,white,,,,
+e9446f84-9be0-4545-8338-94879cc67b3f,/collection/sherry-lehmann/D-005/d7jp4g/media/images/d7jp4g-007.jpg,quinn,country,2868,940,3296,3140,3276,660,5696,3884,,,,,,spain,,
+a97d490d-6f4c-4bfd-841b-80fa4dab3639,/collection/sherry-lehmann/D-005/d7jp4g/media/images/d7jp4g-007.jpg,quinn,wine_type,2848,912,3300,3208,3288,1044,5672,3828,,fortified,,,,,,
+09a47796-cbf5-46f3-9f26-903f08ef36ce,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,country,948,4960,1120,5730,1090,4926,3106,5878,,,,,,Australia,,
+d123d814-2c45-4479-9430-55339873b81a,/collection/sherry-lehmann/D-005/d7jp4g/media/images/d7jp4g-007.jpg,quinn,section_title,2764,888,3308,3216,3276,1036,5704,3856,Sherry,,,,,,,
+c0a9ea17-5c85-4675-a54b-c2a74257507f,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,color,2634,3140,2810,4056,2758,3102,3062,5030,,,,red,,,,
+00b7790d-8a2b-4cdb-bd92-e82da77413ba,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,country,418,750,578,2470,582,736,3700,2800,,,,,,France,,
+73034e77-405a-4aa3-861a-e8cb0a19ed2e,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,country,420,3074,572,4088,600,3086,1550,5078,,,,,,USA,,
+f29769ce-41f8-468a-9ace-76856fc49f7a,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,section_title,182,324,426,2818,228,174,3140,2988,Italian White,,,,,,,
+280634f4-b100-48ac-9c6e-3b2f70732203,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,wine_type,420,800,602,2382,608,768,3680,2786,,sparkling,,,,,,
+e5c14985-438f-43a5-b0ff-a2932170ffe6,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,wine_type,420,3114,554,4128,562,3096,1530,5050,,sparkling,,,,,,
+38cbcefa-6e90-490f-8640-6032ca22ec64,/collection/sherry-lehmann/D-637/d7gm11/media/images/d7gm11-009.jpg,quinn,section_title,384,4682,640,5782,618,4628,3818,5834,Chateau Bouscaut,,,,,,,
+7879483b-d503-4cbb-96bb-c414b93f628c,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,wine_type,1532,3100,1686,4164,1684,3086,2176,5022,,sparkling,,,,,,
+7b7c6619-d645-42d0-98b1-1f37684692b3,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,color,434,244,600,1052,390,180,3140,2996,,,,white,,,,
+ebba36c1-a98c-4695-8c74-be448486926f,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,country,2166,3096,2296,4164,2306,3086,2654,5094,,,,,,Chile,,
+aa72a3f3-5338-4d93-bb43-a52adaa565ba,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,country,2624,3064,2808,4054,2764,3094,3102,5180,,,,,,Chile,,
+4b00930e-a76d-483c-abe0-a12e871eab29,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,color,570,3114,638,3982,632,3108,3070,4026,,,,red,,,,
+3a17a2f7-2a3e-468c-90c9-b3af21939925,/collection/sherry-lehmann/D-202/d70k5v/media/images/d70k5v-009.jpg,quinn,country,3062,3114,3240,3980,3202,3092,3732,5058,,,,,,Switzerland,,
+c9118f6f-71fa-426c-b599-a129c5acd748,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,country,440,258,590,1066,360,168,3154,2960,,,,,,Italy,,
+5482af98-61a3-4df3-b8d0-38f9e81d6198,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,country,410,3138,600,3968,390,3098,3086,4032,,,,,,SouthAfrica,,
+5730bb23-6bef-452c-9d92-44a8b5e655cb,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,color,400,4038,496,4480,478,4024,2176,4904,,,,white,,,,
+d202232b-a92d-439d-9874-60f816f68d68,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,country,432,3118,566,3976,402,4014,2156,4892,,,,,,South Africa,,
+9cb24515-0c4a-419b-9073-720bd13a515a,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,country,2156,4072,2282,4720,2298,4026,3074,4926,,,,,,Argentina,,
+25abeddf-fa5f-42f4-940b-d3066e9180b2,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,country,406,4952,614,5804,480,4924,970,5822,,,,,,Austria,,
+b3aaac6a-9fa7-45c6-9988-144ae32a8e32,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,color,2286,4030,2384,4914,2244,4008,3052,4930,,,,red,,,,
+ff975c49-e5ab-45aa-a144-55b7088a2f4f,/collection/sherry-lehmann/D-202/d7v30w/media/images/d7v30w-028.jpg,quinn,country,1272,912,1466,2950,1496,312,4984,3744,,,,,,USA,,
+75356749-0ceb-41f8-bf2c-576a068697e5,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,color,564,4944,638,5306,578,4918,950,5804,,,,white,,,,
+606991c5-4af5-4813-bad8-945aa642d180,/collection/sherry-lehmann/D-637/d7994h/media/images/d7994h-023.jpg,quinn,color,1110,4946,1186,5310,1150,4912,3144,5862,,,,red,,,,
+c90d4578-2ba4-4780-bea5-d46bd1c45a6d,/collection/sherry-lehmann/D-202/d7v30w/media/images/d7v30w-028.jpg,quinn,section_title,4432,1524,4592,1880,4552,1504,4824,2568,Idaho,,,,,,,
+be89fa54-a696-44bd-b2a3-1d1570584fea,/collection/sherry-lehmann/D-202/d7v30w/media/images/d7v30w-028.jpg,quinn,section_title,2928,460,3160,1344,3136,384,4892,1520,White Wine New York State,,,,,,,
+0a33b76f-b810-43a5-9e04-7490fbafa043,/collection/sherry-lehmann/D-202/d7v30w/media/images/d7v30w-028.jpg,quinn,color,2908,452,3196,1368,3360,396,4492,1460,,,,white,,,,
+59732ab4-a92c-4837-ad7c-d366d7412d52,/collection/sherry-lehmann/D-202/d7v30w/media/images/d7v30w-028.jpg,quinn,section_title,2592,1496,2732,1868,2596,1464,4512,2624,Oregon,,,,,,,
+7424cbde-8e64-4d14-b232-cfd176f38b2f,/collection/sherry-lehmann/D-202/d7v30w/media/images/d7v30w-028.jpg,quinn,section_title,3832,1508,3964,2152,3928,1484,4468,2532,Washington,,,,,,,
+cf73fc18-3c87-4afd-801f-b08d80df3d1f,/collection/sherry-lehmann/D-202/d7v30w/media/images/d7v30w-028.jpg,quinn,color,3692,2592,3860,3276,3800,2552,4212,3668,,,,red,,,,
+64783265-8e0d-41ed-869e-70a56e5fb8c5,/collection/sherry-lehmann/D-202/d7v30w/media/images/d7v30w-028.jpg,quinn,color,2788,2580,2932,3548,2872,2616,3780,3680,,,,white,,,,
+a784c9c5-8d06-4844-8af1-2955befe57b5,/collection/sherry-lehmann/D-637/d75m17/media/images/d75m17-020.jpg,quinn,color,188,1266,424,2936,258,190,3154,5840,,,,red,,,,
+dfa49848-c2c1-46af-afb9-dce1b664b1ce,/collection/sherry-lehmann/D-637/d75m17/media/images/d75m17-020.jpg,quinn,vintage,226,1244,400,4642,318,188,3196,5888,,,,,1995,,,
+601ba43e-ef49-47a8-865a-a5c3b78ae2bf,/collection/sherry-lehmann/D-637/d75m17/media/images/d75m17-020.jpg,quinn,section_title,186,1270,420,4730,338,200,3190,5866,Bordeaux,,,,,,,
+\.
+
+
+#+END_SRC
+
+#+RESULTS:
+| COPY 42 |
+|---------|

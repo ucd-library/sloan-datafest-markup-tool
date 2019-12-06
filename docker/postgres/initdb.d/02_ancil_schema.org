@@ -1,0 +1,99 @@
+#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
+
+** Ancillary Files
+There are a number of ancillary files that can be used in later calculations of
+catalog data. These can be used potentially in some natural language processing
+environments.
+
+#+BEGIN_SRC sql
+drop schema if exists ancil cascade;
+create schema ancil;
+create table ancil.countries (
+  country_id serial primary key,
+  country text
+);
+create table ancil.countries_adj (
+  country_id serial primary key,
+  country_adj text
+);
+create table ancil.designations (
+  designation_id serial primary key,
+  designation text
+);
+create table ancil.producers (
+  producer_id serial primary key,
+  producer text,
+  country text
+);
+create table ancil.provinces (
+  province_id serial primary key,
+  province text,
+  country text
+);
+create table ancil.regions (
+  region_id serial primary key,
+  region text,
+  country text
+);
+create table ancil.varieties (
+  variety_id serial primary key,
+  variety text
+);
+
+#+END_SRC
+
+#+RESULTS:
+| DROP SCHEMA   |
+|---------------|
+| CREATE SCHEMA |
+| CREATE TABLE  |
+| CREATE TABLE  |
+| CREATE TABLE  |
+| CREATE TABLE  |
+| CREATE TABLE  |
+| CREATE TABLE  |
+| CREATE TABLE  |
+
+These data are downloaded from gitlab in the initialization step
+
+#+BEGIN_SRC sql
+copy ancil.countries from 'io/ancil/countries.csv' with csv header;
+copy ancil.countries_adj from 'io/ancil/countries_adj.csv' with csv header;
+copy ancil.designations from 'io/ancil/designations.csv' with csv header;
+copy ancil.producers from 'io/ancil/producers.csv' with csv header;
+copy ancil.provinces from 'io/ancil/provinces.csv' with csv header;
+copy ancil.regions from 'io/ancil/regions.csv' with csv header;
+copy ancil.varieties from 'io/ancil/varieties.csv' with csv header;
+#+END_SRC
+
+For whatever reason, the R datafiles have lots of extra whitespace. This won't
+hurt if that changes at a later date.
+
+#+BEGIN_SRC sql
+
+update ancil.countries set country=trim(both from country);
+update ancil.countries_adj set  country_adj=trim(both from country_adj);
+update ancil.designations set  designation=trim(both from designation);
+update ancil.producers set  producer=trim(both from producer), country=trim(both from country) ;
+update ancil.provinces set  province=trim(both from province), country=trim(both from country) ;
+update ancil.regions set region=trim(both from region), country=trim(both from country) ;
+update ancil.varieties set  variety=trim(both from variety);
+
+#+END_SRC
+
+#+RESULTS:
+| COPY 239     |
+|--------------|
+| COPY 174     |
+| COPY 35389   |
+| COPY 16270   |
+| COPY 383     |
+| COPY 1165    |
+| COPY 683     |
+| UPDATE 239   |
+| UPDATE 174   |
+| UPDATE 35389 |
+| UPDATE 16270 |
+| UPDATE 383   |
+| UPDATE 1165  |
+| UPDATE 683   |

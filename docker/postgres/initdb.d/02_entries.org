@@ -1,0 +1,52 @@
+** Wine Search
+#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
+
+These are the wine prices that were discovered through our previous efforts in
+data price extraction
+
+#+BEGIN_SRC sql
+DROP SCHEMA IF exists wine_search cascade;
+create schema wine_search;
+#+END_SRC
+
+#+RESULTS:
+| DROP SCHEMA   |
+|---------------|
+| CREATE SCHEMA |
+
+#+BEGIN_SRC sql
+CREATE TABLE wine_search.prices (
+    page_ark text,
+    ark text,
+    page integer,
+    name text,
+    vintage integer,
+    type text,
+    color text,
+    country text,
+    section text,
+    bottle_type text,
+    perprice numeric(12,2),
+    caseprice numeric(12,2),
+    bbox text,
+    title text,
+    publisher text,
+    publication_date integer
+);
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE TABLE |
+|--------------|
+
+These are also imported from the initialization script
+
+#+BEGIN_SRC sql
+copy wine_search.prices from 'io/wine_search.csv' with csv header;
+
+#+END_SRC
+
+#+RESULTS:
+| COPY 214018 |
+|-------------|

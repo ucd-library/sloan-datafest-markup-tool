@@ -1,0 +1,70 @@
+** Initialize Database
+#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
+
+*** PostgresSQL Extensions
+**** POSTGIS
+
+Postgis is used if we want to use GIS functions, eg. to join on bounding boxes;
+
+#+BEGIN_SRC sql
+CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
+COMMENT ON EXTENSION postgis IS 'Postgis Geographic Package';
+#+END_SRC
+
+#+RESULTS:
+| CREATE EXTENSION |
+|------------------|
+| COMMENT          |
+| ALTER DATABASE   |
+
+**** uuid-ossp
+
+UUIDS are needed for creating unique identifiers for the individual marks.
+
+#+BEGIN_SRC sql
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
+#+END_SRC
+
+#+RESULTS:
+| CREATE EXTENSION |
+|------------------|
+
+*** Authentication Roles
+
+There are a number of different authentication roles used in the application.
+Some of these are used in the pgrest implementation, and some with the
+crowd-source application.
+
+#+BEGIN_SRC sql
+CREATE ROLE anon;
+CREATE ROLE datafestuser;
+CREATE ROLE admin;
+CREATE ROLE authenticator noinherit;
+
+-- ALLOW PGR TO UPGRADE ROLES
+GRANT datafestuser TO authenticator;
+GRANT anon TO authenticator;
+GRANT admin TO authenticator;
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE ROLE |
+|-------------|
+| CREATE ROLE |
+| CREATE ROLE |
+| CREATE ROLE |
+| GRANT ROLE  |
+| GRANT ROLE  |
+| GRANT ROLE  |
+*** Defaults
+
+By default we show a few different schemas in the search_path;
+
+#+BEGIN_SRC sql
+alter database :DBNAME set search_path to datafest,catalogs,public,pg_catalog;
+#+END_SRC
+
+#+RESULTS:
+| ALTER DATABASE |
+|----------------|
