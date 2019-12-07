@@ -12,7 +12,16 @@ First, datafest.page is missing page_ark let's fix that
 CREATE function page_ark (in datafest.page, out varchar)
 LANGUAGE SQL IMMUTABLE AS $$
 SELECT regexp_replace($1.page_id,'.*/(.*).jpg','\1');
+$$;
+
+#+END_SRC
+
+#+BEGIN_SRC sql
+CREATE function page_ark (in datafest.mark, out varchar)
+LANGUAGE SQL IMMUTABLE AS $$
+SELECT regexp_replace($1.page_id,'.*/(.*).jpg','\1');
 $$
+
 #+END_SRC
 
 #+RESULTS:
@@ -76,20 +85,71 @@ grant select on datafest.page_price_p to public;
 #+END_SRC
 
 #+RESULTS:
-| SELECT 7221 |
-|-------------|
+| SELECT 0 |
+|----------|
+| GRANT    |
+
+*** Page User Probability
+
+~page_user_p~ is a set of probabilities on the individual pages based on the
+user.  Currently, this is binary, a prob of 1 if the user hasn't previously
+visited the page and a prob of 0 if they have.  Visits are based on adding marks
+to the record.  This function is used to create a user specific probability for
+the next_page function.  The ~anon~ user is just a placeholder if we plan on
+adding anonymous additions at a later date.
 
 #+BEGIN_SRC sql
-CREATE function datafest.next_page()
+CREATE or replace function
+datafest.page_user_p (user_id varchar default 'anon')
+RETURNS TABLE (
+ page_ark varchar,
+ prob float
+)
+LANGUAGE SQL AS $$
+select
+ p.page_ark,
+ case when (m is null) then 1.0::float else 0.0::float end as prob
+ from datafest.page p
+ left join
+ (
+   select distinct page_id from datafest.mark where user_id=$1
+ ) as m using (page_id)
+$$;
+#+END_SRC
+
+#+RESULTS:
+| CREATE FUNCTION |
+|-----------------|
+
+*** Next Page
+
+The ~next_page~ function is used to calculate the next page to deliver a user.
+This is based on the number of prices, ~page_price_p~ and the user visits,
+~page_user_p(user_id)~.  Later, we need to add parameter to get the next and
+previous page in the catalogs, so that users can browse through an entire catalog.
+
+
+#+BEGIN_SRC sql
+DROP function if exists datafest.next_page(varchar);
+CREATE function datafest.next_page(user_id varchar DEFAULT 'anon')
 RETURNS varchar
 LANGUAGE SQL AS $$
-with a as (
- select random()*max(cum) as p from datafest.page_price_p
+with pr as (
+ select
+ page_ark,
+ p.prob*u.prob as prob,
+ sum(p.prob*u.prob) OVER (order by page_ark RANGE UNBOUNDED PRECEDING) as cum
+ from datafest.page_price_p p
+ join page_user_p('quinn') u using (page_ark)
+ where u.prob>0 and p.prob>0
+),
+r as (
+ select random()*max(cum) as ran from pr
 )
 select page_ark
-from page_price_p,a
-where cum>a.p
-order by cum
+from pr,r
+where cum<r.ran
+order by cum desc
 limit 1
 $$
 
@@ -97,5 +157,6 @@ $$
 #+END_SRC
 
 #+RESULTS:
-| CREATE FUNCTION |
+| DROP FUNCTION   |
 |-----------------|
+| CREATE FUNCTION |

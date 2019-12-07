@@ -1,12 +1,3 @@
-** Existing Marks
-#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
-
-We do want to save marks from current sets.  For now, we'll just include those
-directly here.  If we restart, for example, we can add more into the system...
-
-This version from 2019-12-06
-
-#+BEGIN_SRC sql
 copy datafest.mark(mark_id,page_id,user_id,type,implicator_top,implicator_left,implicator_bottom,implicator_right,region_top,region_left,region_bottom,region_right,section_title,wine_type,bottle_type,color,vintage,country,bottle_price,case_price
 )
 from stdin with csv header;
@@ -285,9 +276,3 @@ c053f8df-87c0-4d56-add0-a9969c2a3385,/collection/sherry-lehmann/D-637/d7pq0j/med
 76600a7b-d1ee-4025-b119-0ded58ffe7a1,/collection/sherry-lehmann/D-637/d7pq0j/media/images/d7pq0j-004.jpg,quinn,color,379,208,515,632,219,32,3371,2872,,,,white,,,,
 dbf24ac1-063a-4e95-b9eb-1964aea2520b,/collection/sherry-lehmann/D-637/d7pq0j/media/images/d7pq0j-004.jpg,quinn,color,415,1070,495,1396,431,1012,3331,1872,,,,white,,,,
 \.
-
-#+END_SRC
-
-#+RESULTS:
-| COPY 273 |
-|----------|
