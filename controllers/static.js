@@ -27,7 +27,7 @@ module.exports = (app) => {
     appRoutes : config.server.appRoutes, // array of root paths.  ie appRoutes = ['foo', 'bar'] to server /foo/* /bar/*
     getConfig : async (req, res, next) => {
       if( !req.session || !req.session.cas_user) {
-        return res.redirect('/login?redirect='+encodeURIComponent(req.originalUrl));
+        return res.redirect('/login.html?redirect='+encodeURIComponent(req.originalUrl));
       }
 
       next({

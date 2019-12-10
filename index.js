@@ -14,6 +14,7 @@ app.use(session({
 app.all(/\/pgr\/.*/, require('./controllers/pgr'));
 
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded());
 
 app.use(require('./controllers'));
 require('./controllers/static')(app);

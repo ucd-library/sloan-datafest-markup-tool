@@ -43,6 +43,7 @@ services:
       - ../../client/public/loader:/app/client/public/loader
       - ../../client/public/js:/app/client/public/js
       - ../../client/public/index.html:/app/client/public/index.html
+      - ../../client/public/login.html:/app/client/public/login.html
     command: bash -c "tail -f /dev/null"
 
 volumes:

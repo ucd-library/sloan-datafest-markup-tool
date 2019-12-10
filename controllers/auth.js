@@ -30,6 +30,15 @@ router.get('/login', (req, res) => {
   });
 });
 
+router.post('/anon-login', (req, res) => {
+  let username = (req.body.username || '').trim().toLowerCase();
+  if( !username ) username = 'anonymous';
+
+  req.session[cas.session_name] = username;
+
+  res.redirect(req.query.redirect || '/');
+});
+
 router.get('/logout', (req, res) => {
   req.session.destroy();
   res.redirect('/');

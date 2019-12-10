@@ -1,8 +1,9 @@
 const router = require('express').Router();
 const model = require('../../models/mark');
 const sendError = require('../utils/send-error');
+const auth = require('../utils/auth');
 
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   try {
     let mark = req.body;
     mark.user_id = req.session.cas_user;
@@ -13,7 +14,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.delete('/:markId', async (req, res) => {
+router.delete('/:markId', auth, async (req, res) => {
   try {
     res.json(await model.delete(req.params.markId, req.session.cas_user));
   } catch(e) {
