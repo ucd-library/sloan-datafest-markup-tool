@@ -74,8 +74,8 @@ with pr as (
 r as (
  select random()*max(cum) as ran from pr
 )
-select page_ark
-from pr,r
+select page_id
+from pr join datafest.page p on (pr.page_ark=p.page_ark),r
 where cum<r.ran
 order by cum desc
 limit 1
