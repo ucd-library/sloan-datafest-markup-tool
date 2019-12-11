@@ -1,4 +1,12 @@
-create type whisker as (
+** Whisker Plot
+#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912-local" :tangle yes
+
+
+It's oftentimes convenient to have a whisker plot of data.  This is helpful for
+finding outlier data for example.  This is a new aggregation for whisker plots.
+
+#+BEGIN_SRC sql
+create type public.whisker as (
   min numeric,
   min_outliers numeric[],
   qn numeric,
@@ -9,7 +17,7 @@ create type whisker as (
   max_outliers numeric[],
   max numeric );
 
-CREATE OR REPLACE FUNCTION array_whisker(numeric[])
+CREATE OR REPLACE FUNCTION public.array_whisker(numeric[])
     RETURNS whisker AS
   $$
     with
@@ -43,8 +51,16 @@ $$
 LANGUAGE 'sql' IMMUTABLE;
 
 
-CREATE AGGREGATE whisker(numeric) (
+CREATE AGGREGATE public.whisker(numeric) (
   SFUNC=array_append,
   STYPE=numeric[],
   FINALFUNC=array_whisker
 );
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE TYPE      |
+|------------------|
+| CREATE FUNCTION  |
+| CREATE AGGREGATE |

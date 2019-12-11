@@ -22,14 +22,14 @@ a as (select ark,json,
 )
 select
  row_number() over () as page_id,
- ark,json->>'id' as page,json,
+ ark as page_ark,json->>'id' as page,json,
  st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
    st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
 from a;
 
 create materialized view tesseract.carea as
 with c as ( select
- page_id,ark,
+ page_id,page_ark,
  jsonb_array_elements(json->'children') as json
  from tesseract.pages
 ),
@@ -39,14 +39,14 @@ a as (select *,
 )
 select
  row_number() over () as carea_id,
- page_id,ark,json->>'id' as carea,json,
+ page_id,page_ark,json->>'id' as carea,json,
  st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
    st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
 from a;
 
 create materialized view tesseract.par as
 with c as (select
- page_id,carea_id,ark,
+ page_id,carea_id,page_ark,
  jsonb_array_elements(json->'children') as json
 from tesseract.carea
 ),
@@ -56,7 +56,7 @@ a as (select *,
 )
 select
 row_number() over () as par_id,
-page_id,carea_id,ark,json->>'id' as par,
+page_id,carea_id,page_ark,json->>'id' as par,
 json,
 st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
    st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
@@ -64,7 +64,7 @@ from a;
 
 create materialized view tesseract.line as
 with c as (select
- page_id,carea_id,par_id,ark,
+ page_id,carea_id,par_id,page_ark,
  jsonb_array_elements(json->'children') as json
 from tesseract.par),
 a as (select *,
@@ -73,7 +73,7 @@ a as (select *,
 )
 select
  row_number() over () as line_id,
- page_id,carea_id,par_id,ark,json->>'id' as line,
+ page_id,carea_id,par_id,page_ark,json->>'id' as line,
  (regexp_matches(json->>'title','baseline ((-?[.\d]+) (-?[.\d]+))'))[1] as baseline,
  json,
  st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
@@ -83,7 +83,7 @@ from a;
 create materialized view tesseract.words as
 with c as (
 select
- page_id,carea_id,par_id,line_id,ark,
+ page_id,carea_id,par_id,line_id,page_ark,
  jsonb_array_elements(json->'children') as json
 from tesseract.line
 ),
@@ -95,7 +95,7 @@ a as (select *,
 )
 select
  row_number() over () as word_id,
- page_id,carea_id,par_id,line_id,ark,json->>'id' as word,
+ page_id,carea_id,par_id,line_id,page_ark,json->>'id' as word,
  text,
  x_wconf,
  json,
@@ -105,8 +105,43 @@ select
 from a
 where text is not null;
 
-create index words_ark on tesseract.words(ark);
+create index words_page_ark on tesseract.words(page_ark);
 create index words_line_id on tesseract.words(line_id);
+
+create or replace function text (l in tesseract.line, out t text)
+LANGUAGE SQL IMMUTABLE AS $$
+select string_agg(w->>'text',' ') as t from jsonb_array_elements(l.json->'children') w;
+$$;
+
+create or replace function text (p in tesseract.par, out t text)
+LANGUAGE SQL IMMUTABLE AS $$
+select string_agg(w->>'text',' ') as t from
+jsonb_array_elements(p.json->'children') l,
+LATERAL jsonb_array_elements(l->'children') w ;
+$$;
+
+create or replace function text (c in tesseract.carea, out t text)
+LANGUAGE SQL IMMUTABLE AS $$
+select string_agg(w->>'text',' ') as t from
+jsonb_array_elements(c.json->'children') p,
+jsonb_array_elements(p->'children') l,
+LATERAL jsonb_array_elements(l->'children') w ;
+$$;
+
+create or replace function text (g in tesseract.pages, out t text)
+LANGUAGE SQL IMMUTABLE AS $$
+select string_agg(w->>'text',' ') as t from
+jsonb_array_elements(g.json->'children') g,
+jsonb_array_elements(g->'children') p,
+jsonb_array_elements(p->'children') l,
+LATERAL jsonb_array_elements(l->'children') w ;
+$$;
+
+create index pages_bbox on tesseract.pages using GIST (bbox);
+create index carea_bbox on tesseract.carea using GIST (bbox);
+create index par_bbox on tesseract.par using GIST (bbox);
+create index line_bbox on tesseract.line using GIST (bbox);
+create index words_bbox on tesseract.words using GIST (bbox);
 
 GRANT USAGE ON SCHEMA tesseract to PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA tesseract to PUBLIC;

@@ -1,12 +1,13 @@
-CREATE function page_ark (in datafest.page, out varchar)
-LANGUAGE SQL IMMUTABLE AS $$
-SELECT regexp_replace($1.page_id,'.*/(.*).jpg','\1');
-$$;
-
-CREATE function page_ark (in datafest.mark, out varchar)
-LANGUAGE SQL IMMUTABLE AS $$
-SELECT regexp_replace($1.page_id,'.*/(.*).jpg','\1');
-$$
+create or replace view datafest.page_everyone as
+with p(page_ark,reason) AS ( VALUES
+('d7tg6n-004','champagne'),
+('d74s4s-027','Loire Valley')
+)
+select page_ark,c.year,c.name,
+format('https://digital.ucdavis.edu/ark:/87287/%s/media/images/%s.jpg',
+       regexp_replace(p.page_ark,'-.*',''),p.page_ark) as jpg
+from p
+join catalogs c on (regexp_replace(p.page_ark,'-.*','')=c.ark);
 
 create materialized view datafest.page_price_p as
 with a as (
@@ -78,3 +79,15 @@ where cum<r.ran
 order by cum desc
 limit 1
 $$
+
+create or replace function implicator_text (m in datafest.mark, t out text)
+LANGUAGE SQL IMMUTABLE AS $$
+select string_agg(w.text,' ' order by w.word_id)
+from rtesseract.word w where (m.page_ark=w.page_ark and st_intersects(m.implicator_bbox,w.bbox));
+$$;
+
+create or replace function region_text (m in datafest.mark, t out text)
+LANGUAGE SQL IMMUTABLE AS $$
+select string_agg(w.text,' ' order by w.word_id)
+from rtesseract.word w where (m.page_ark=w.page_ark and st_intersects(m.region_bbox,w.bbox));
+$$;

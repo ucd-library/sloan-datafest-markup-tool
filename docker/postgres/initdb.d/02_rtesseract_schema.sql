@@ -1,50 +1,45 @@
-* Tesseract
-#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
+drop schema if exists rtesseract cascade;
+create schema rtesseract;
 
-The Tessearct schema comes from the output of the commandline version of the
-tessearct applicaetion.
+create table rtesseract.rtesseract_word (
+page_ark text,
+num integer,
+"left" integer,
+top integer,
+"right" integer,
+bottom integer,
+text text,
+confidence float
+);
 
-#+BEGIN_SRC sql
+-- There are some bad wods in this setup.
+delete from rtesseract.rtesseract_words where "left"=0 and top=0;
+
+copy rtesseract.word from 'io/Rtesseract_words.csv' with csv;
+
+create materialized view rtesseract.word as
+select
+page_ark ||'-'||num as word_id,
+page_ark,
+st_setsrid(st_makebox2d(st_makepoint("left",-top),st_makepoint("right",-bottom)),32662) as bbox,
+text,
+confidence
+from rtesseract.rtesseract_word;
+
+create index word_bbox on rtessearct.word USING GIST(bbox);
+create index word_page_ark on rtesseract.word(page_ark);
+
 drop schema if exists tesseract;
 create schema tesseract;
-#+END_SRC
 
-#+RESULTS:
-| DROP SCHEMA   |
-|---------------|
-| CREATE SCHEMA |
-
-
-We need to create some good methods for accessing the tesseract data from within
-the postgres database.  We'll use materialized views from our text extraction.
-
-Then let's create our JSON table, and import our data.
-
-#+BEGIN_SRC sql
 create table tesseract.hocr (
 ark text,
 rotation float,
 hocr jsonb
 );
-#+END_SRC
 
-#+RESULTS:
-| CREATE TABLE |
-|--------------|
-
-#+BEGIN_SRC sql
 COPY tesseract.hocr (ark,rotation,hocr) from 'io/hocr.tsv';
-#+END_SRC
 
-#+RESULTS:
-| COPY 7442 |
-|-----------|
-
-The data in the hocr table is a json format that came from the tesseract hocr
-html, and converted with pup.  It's not convenient :) The following views make
-the data more readily usable.
-
-#+BEGIN_SRC sql
 create materialized view tesseract.pages as
 with c as ( select
  ark,
@@ -62,36 +57,24 @@ select
  st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
    st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
 from a;
-#+END_SRC
 
-#+RESULTS:
-| SELECT 7441 |
-|-------------|
+create materialized view tesseract.carea as
+with c as ( select
+ page_id,page_ark,
+ jsonb_array_elements(json->'children') as json
+ from tesseract.pages
+),
+a as (select *,
+ regexp_split_to_array((regexp_matches(json->>'title','(bbox([\s\d])+)'))[1],' ') as b
+ from c
+)
+select
+ row_number() over () as carea_id,
+ page_id,page_ark,json->>'id' as carea,json,
+ st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
+   st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
+from a;
 
-#+BEGIN_SRC sql
-  create materialized view tesseract.carea as
-  with c as ( select
-   page_id,page_ark,
-   jsonb_array_elements(json->'children') as json
-   from tesseract.pages
-  ),
-  a as (select *,
-   regexp_split_to_array((regexp_matches(json->>'title','(bbox([\s\d])+)'))[1],' ') as b
-   from c
-  )
-  select
-   row_number() over () as carea_id,
-   page_id,page_ark,json->>'id' as carea,json,
-   st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
-     st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
-  from a;
-#+END_SRC
-
-#+RESULTS:
-| SELECT 473885 |
-|---------------|
-
-#+BEGIN_SRC sql
 create materialized view tesseract.par as
 with c as (select
  page_id,carea_id,page_ark,
@@ -109,13 +92,7 @@ json,
 st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
    st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
 from a;
-#+END_SRC
 
-#+RESULTS:
-| SELECT 544980 |
-|---------------|
-
-#+BEGIN_SRC sql
 create materialized view tesseract.line as
 with c as (select
  page_id,carea_id,par_id,page_ark,
@@ -133,31 +110,7 @@ select
  st_setsrid(st_makebox2d(st_makepoint(b[2]::integer,-b[3]::integer),
    st_makepoint(b[4]::integer,-b[5]::integer)),32662) as bbox
 from a;
-#+END_SRC
 
-#+RESULTS:
-| SELECT 1343776 |
-|----------------|
-
-#+BEGIN_SRC sql :tangle no
-drop function if exists tesseract.ocr_title_parm(in l json,in key text,out v text[]);
-create function tesseract.ocr_title_parm(in l json,in key text,out v text[])
-LANGUAGE SQL AS $$
-   with a as (
-   select regexp_split_to_array(unnest(t),' ') as v
-   from line,regexp_split_to_array($1->>'title','\s*;\s*') as t
-   )
-   select v[2:100] as v from a where v[1]=$2
-$$;
-
-#+END_SRC
-
-#+RESULTS:
-| DROP FUNCTION   |
-|-----------------|
-| CREATE FUNCTION |
-
-#+BEGIN_SRC sql
 create materialized view tesseract.words as
 with c as (
 select
@@ -185,15 +138,6 @@ where text is not null;
 
 create index words_page_ark on tesseract.words(page_ark);
 create index words_line_id on tesseract.words(line_id);
-#+END_SRC
-
-*** Text aggreagations
-
-The tesseract words function has text, but the others do not.  It would be nice
-to have a text function for the other regions as well.  The best strategy would
-be to get the data from the json that is associated with all tesseract entries.
-
-#+BEGIN_SRC sql
 
 create or replace function text (l in tesseract.line, out t text)
 LANGUAGE SQL IMMUTABLE AS $$
@@ -224,47 +168,12 @@ jsonb_array_elements(p->'children') l,
 LATERAL jsonb_array_elements(l->'children') w ;
 $$;
 
-#+END_SRC
-
-#+RESULTS:
-| CREATE FUNCTION |
-|-----------------|
-| CREATE FUNCTION |
-| CREATE FUNCTION |
-| CREATE FUNCTION |
-
-*** Postgis
-
-Add some bounding box indices
-#+BEGIN_SRC sql
 create index pages_bbox on tesseract.pages using GIST (bbox);
 create index carea_bbox on tesseract.carea using GIST (bbox);
 create index par_bbox on tesseract.par using GIST (bbox);
 create index line_bbox on tesseract.line using GIST (bbox);
 create index words_bbox on tesseract.words using GIST (bbox);
-#+END_SRC
 
-#+RESULTS:
-| SELECT 6860455 |
-|----------------|
-
-** Authorization
-
-#+BEGIN_SRC sql
-GRANT USAGE ON SCHEMA tesseract to PUBLIC;
-GRANT SELECT ON ALL TABLES IN SCHEMA tesseract to PUBLIC;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA tesseract to PUBLIC;
-#+END_SRC
-
-#+RESULTS:
-| GRANT |
-|-------|
-| GRANT |
-| GRANT |
-
-
-#+BEGIN_SRC sql :tangle no
-\d
-#+END_SRC
-
-#+RESULTS:
+GRANT USAGE ON SCHEMA rtesseract to PUBLIC;
+GRANT SELECT ON ALL TABLES IN SCHEMA rtesseract to PUBLIC;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA rtesseract to PUBLIC;

@@ -3,13 +3,7 @@
 
 ** Crowd source Functions
 
-There are a number of functions that we need in order to run the crowd_source
-tool.  These help get data from the system for metrics, and also help o
-
-First, datafest.page is missing page_ark let's fix that
-
-
-** Next Page
+**** Next Page
 
 We want to preferentially choose certain pages over others.  This is so we focus
 our crowd sourcing data on the pages that need the most TLC.  Here are some
@@ -84,7 +78,6 @@ grant select on datafest.page_price_p to public;
 |----------|
 | GRANT    |
 
-
 *** Page User Probability
 
 ~page_user_p~ is a set of probabilities on the individual pages based on the
@@ -116,7 +109,6 @@ $$;
 #+RESULTS:
 | CREATE FUNCTION |
 |-----------------|
-
 
 *** Next Page
 
