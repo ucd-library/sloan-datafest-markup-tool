@@ -10,7 +10,7 @@ mkdir ${io}
 curl --output ${io}/Rtesseract_words.csv https://gitlab.dams.library.ucdavis.edu/wine-prices/datafest201912/raw/master/R/Rtesseract_words.csv?inline=false
 
 # Get HOCR data
-curl --output ${io}/hocr.tsv https://gitlab.dams.library.ucdavis.edu/wine-prices/datafest201912/raw/master/tesseract/hocr.tsv?inline=false
+# curl --output ${io}/hocr.tsv https://gitlab.dams.library.ucdavis.edu/wine-prices/datafest201912/raw/master/tesseract/hocr.tsv?inline=false
 
 mkdir ${io}/ancil
 # Get Ancillary Datasets

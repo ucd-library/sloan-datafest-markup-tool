@@ -1,6 +1,6 @@
 #! /usr/bin/make -f
 
-ignore:=README.org save.org
+ignore:=README.org save.org 02_tesseract_schema.org
 org:=$(wildcard *.org)
 
 sql:=$(patsubst %.org,%.sql,$(filter-out ${ignore},${org}))

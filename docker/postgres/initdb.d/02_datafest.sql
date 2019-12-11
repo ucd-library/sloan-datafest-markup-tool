@@ -50,10 +50,9 @@ create index page_page_ark on page (page_ark(page));
 CREATE or replace function page_ark (in datafest.mark, out varchar)
 LANGUAGE SQL IMMUTABLE AS $$
 SELECT regexp_replace($1.page_id,'.*/(.*).jpg','\1');
+$$;
 
 create index mark_page_ark on mark (page_ark(mark));
-
-$$
 
 CREATE or replace function implicator_bbox (in m datafest.mark, out implicator_bbox geometry('Polygon',32662) )
 LANGUAGE SQL IMMUTABLE AS $$

@@ -9,15 +9,16 @@ format('https://digital.ucdavis.edu/ark:/87287/%s/media/images/%s.jpg',
 from p
 join catalogs c on (regexp_replace(p.page_ark,'-.*','')=c.ark);
 
+drop materialized view if exists datafest.page_price_p;
 create materialized view datafest.page_price_p as
 with a as (
- select t.ark as page_ark
- from tesseract.pages t
- join datafest.page p on (t.ark=p.page_ark)
+ select t.page_ark
+ from rtesseract.page t
+ join datafest.page p on (t.page_ark=p.page_ark)
 ),
 b as (
  select page_ark,count(*)
- from wine_search.prices
+ from wine_search.price
  join a using (page_ark)
  group by page_ark
 ),
@@ -78,7 +79,7 @@ from pr,r
 where cum<r.ran
 order by cum desc
 limit 1
-$$
+$$;
 
 create or replace function implicator_text (m in datafest.mark, t out text)
 LANGUAGE SQL IMMUTABLE AS $$
