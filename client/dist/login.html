@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Datafest Markup Tool - Login</title>
+    <meta name="viewport" content="width=device-width, minimum-scale=1, initial-scale=1">
+
+    <style>
+      html, body {
+        font-family: Arial, Helvetica, sans-serif;
+        padding: 0;
+        margin: 0;
+        height: 100vh;
+        width: 100vw;
+        background: white;
+      }
+
+      .layout {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+      }
+
+      .login-panel {
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        min-width: 300px;
+        padding: 25px;
+        margin: 10px;
+      }
+
+      a, input[type="submit"] {
+        text-decoration: none;
+        cursor: pointer;
+        background-color: #18779B;
+        border-radius: 3px;
+        color: white;
+        padding: 15px 8px;
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        border: none;
+        text-align: left;
+        font-size: 15px;
+      }
+
+      .or {
+        margin: 45px 0;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #ccc;
+      }
+
+      input[type="text"] {
+        border-radius: 0;
+        height: 34px;
+        font-size: 20px;
+        min-width: 150px;
+        background-color: white;
+        display: block;
+        margin-bottom: 10px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+    </style>
+  </head>
+  <body>
+
+    <div class="layout">
+      <h2>Datafest Markup Tool</h2>
+      <div class="login-panel">
+        <h3 style="margin-top: 0">Login</h3>
+
+        <div>
+            <a href="/login" id="ucd-login-btn">UC Davis Login</a>
+        </div>
+        
+        <div class="or"></div>
+        
+        <form id="anon-form" name="anon-form" method="POST" action="/anon-login">
+          <div>
+            <input id="username" name="username" type="text" placeholder="Username" />
+          </div>
+
+          <input type="submit" value="Non-UCD Login">
+        </form>
+      </div>
+    </div>
+
+    <script>
+      function getQueryVariable(variable) {
+        var query = window.location.search.substring(1);
+        var vars = query.split('&');
+        for (var i = 0; i < vars.length; i++) {
+            var pair = vars[i].split('=');
+            if (decodeURIComponent(pair[0]) == variable) {
+                return decodeURIComponent(pair[1]);
+            }
+        }
+        return null;
+      }
+
+      let redirectUrl = getQueryVariable('redirect');
+      if( redirectUrl ) {
+        document.querySelector('#anon-form').setAttribute('action', '/anon-login?redirect='+encodeURIComponent(redirectUrl));
+        document.querySelector('#ucd-login-btn').setAttribute('href', '/login?redirect='+encodeURIComponent(redirectUrl));
+      }
+    </script>
+
+  </body>
+</html>
