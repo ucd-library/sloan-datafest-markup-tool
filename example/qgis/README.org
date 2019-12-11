@@ -1,0 +1,8 @@
+* Spatial Tools - QGIS
+
+This directory is a simple example of using the QGIS Desktop GIS application to
+visualize the datafest data.  For convenience the page .jpg file is included
+here, aothough they are all available in from the Library's [[https://digital.ucdavis.edu/][Digital Collections]].
+
+The project file includes layers for the impicators and regions, the words on
+the page, and the prices from that page.
