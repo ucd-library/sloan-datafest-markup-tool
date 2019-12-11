@@ -79,20 +79,15 @@ return html`
     </h2>
 
     <div class="input">
-      <app-multi-input 
-        property="wine_type" 
-        label="Wine Type" 
-        type="select" 
-        .options="${this.wineTypes}">
-      </app-multi-input>
+      <app-multi-input property="section_title" label="Section Title" type="text" ></app-multi-input>
+    </div>
+
+    <div class="input">
+      <app-multi-input property="wine_type" label="Wine Type" type="select" .options="${this.wineTypes}" ></app-multi-input>
     </div>
 
     <div class="input">
       <app-multi-input property="color" label="Wine Color" type="select" .options="${this.wineColors}" ></app-multi-input>
-    </div>
-
-    <div class="input">
-      <app-multi-input property="bottle_price" label="Price Per Bottle" type="number" ></app-multi-input>
     </div>
 
     <div class="input">
@@ -104,15 +99,15 @@ return html`
     </div>
 
     <div class="input">
-      <app-multi-input property="case_price" label="Price Per Case" type="number" ></app-multi-input>
-    </div>
-
-    <div class="input">
       <app-multi-input property="bottle_type" label="Bottle Type" type="select" .options="${this.bottleSizes}" ></app-multi-input>
     </div>
 
     <div class="input">
-      <app-multi-input property="section_title" label="Section Title" type="text" ></app-multi-input>
+      <app-multi-input property="bottle_price" label="Price Per Bottle" type="number" ></app-multi-input>
+    </div>
+
+    <div class="input">
+      <app-multi-input property="case_price" label="Price Per Case" type="number" ></app-multi-input>
     </div>
   </div>
 
