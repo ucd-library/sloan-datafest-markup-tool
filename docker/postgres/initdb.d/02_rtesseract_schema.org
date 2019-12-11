@@ -1,5 +1,79 @@
-* Tesseract
+* Rtesseract
 #+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
+
+Rteseract are word results from pulling data directly in from the ~Rtesseract~
+library output.  ~Rtessearct~ seems to do a better job of creating the binary
+data images created before running tesseract. The output doesn't include all the
+data the tesserat OCR data does.
+
+First, let's put all our data into a rtesseract schema.
+
+#+BEGIN_SRC sql
+drop schema if exists rtesseract cascade;
+create schema rtesseract;
+#+END_SRC
+
+#+RESULTS:
+| DROP SCHEMA   |
+|---------------|
+| CREATE SCHEMA |
+
+
+#+BEGIN_SRC sql
+create table rtesseract.rtesseract_word (
+page_ark text,
+num integer,
+"left" integer,
+top integer,
+"right" integer,
+bottom integer,
+text text,
+confidence float
+);
+
+-- There are some bad wods in this setup.
+delete from rtesseract.rtesseract_words where "left"=0 and top=0;
+#+END_SRC
+
+#+RESULTS:
+| CREATE TABLE |
+|--------------|
+| CREATE INDEX |
+
+Now,  we can copy in the data from a previous run of that project. The data is
+available via the gitlab project.
+
+#+BEGIN_SRC sql
+copy rtesseract.word from 'io/Rtesseract_words.csv' with csv;
+#+END_SRC
+
+#+RESULTS:
+| COPY 9923384 |
+|--------------|
+
+In order to use this data in PostGIS, we also need a materialized version of
+this table with proper regions.  QGIS also requires a unique identifier for
+every item in it's tables; for that we'll combine the page_ark and number
+
+#+BEGIN_SRC sql
+create materialized view rtesseract.word as
+select
+page_ark ||'-'||num as word_id,
+page_ark,
+st_setsrid(st_makebox2d(st_makepoint("left",-top),st_makepoint("right",-bottom)),32662) as bbox,
+text,
+confidence
+from rtesseract.rtesseract_word;
+
+create index word_bbox on rtessearct.word USING GIST(bbox);
+create index word_page_ark on rtesseract.word(page_ark);
+
+#+END_SRC
+
+#+RESULTS:
+| SELECT 9923384 |
+|----------------|
+
 
 The Tessearct schema comes from the output of the commandline version of the
 tessearct applicaetion.
@@ -255,9 +329,9 @@ create index words_bbox on tesseract.words using GIST (bbox);
 ** Authorization
 
 #+BEGIN_SRC sql
-GRANT USAGE ON SCHEMA tesseract to PUBLIC;
-GRANT SELECT ON ALL TABLES IN SCHEMA tesseract to PUBLIC;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA tesseract to PUBLIC;
+GRANT USAGE ON SCHEMA rtesseract to PUBLIC;
+GRANT SELECT ON ALL TABLES IN SCHEMA rtesseract to PUBLIC;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA rtesseract to PUBLIC;
 #+END_SRC
 
 #+RESULTS:
@@ -265,10 +339,3 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA tesseract to PUBLIC;
 |-------|
 | GRANT |
 | GRANT |
-
-
-#+BEGIN_SRC sql :tangle no
-\d
-#+END_SRC
-
-#+RESULTS:

@@ -45,18 +45,21 @@ CREATE ROLE authenticator noinherit;
 GRANT datafestuser TO authenticator;
 GRANT anon TO authenticator;
 GRANT admin TO authenticator;
+#+END_SRC
 
+Also we need to allow anon login for our db connections.  The login is needed for the
+postgres/qgis connections.
+
+#+BEGIN_SRC sql
+alter user anon encrypted password 'anon';
+alter role anon login ;
 #+END_SRC
 
 #+RESULTS:
-| CREATE ROLE |
-|-------------|
-| CREATE ROLE |
-| CREATE ROLE |
-| CREATE ROLE |
-| GRANT ROLE  |
-| GRANT ROLE  |
-| GRANT ROLE  |
+| ALTER ROLE |
+|------------|
+| ALTER ROLE |
+
 *** Defaults
 
 By default we show a few different schemas in the search_path;

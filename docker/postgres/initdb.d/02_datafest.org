@@ -69,9 +69,114 @@ CREATE TABLE mark (
 | CREATE TABLE |
 | CREATE TABLE |
 
-Catalog and Page initialization for datafest happens at the initialization step
-by interogating the
+*** page_ark
 
+Most of the rest of the rest of the tables use page_arks for page identifiers.
+We can do some fixup of the code to make it play a bit better.  We'll make some
+functions and indices based on page_arks.
+
+#+BEGIN_SRC sql
+CREATE function page_ark (in datafest.page, out varchar)
+LANGUAGE SQL IMMUTABLE AS $$
+SELECT regexp_replace($1.page_id,'.*/(.*).jpg','\1');
+$$;
+
+create index page_page_ark on page (page_ark(page));
+
+#+END_SRC
+
+#+BEGIN_SRC sql
+CREATE function page_ark (in datafest.mark, out varchar)
+LANGUAGE SQL IMMUTABLE AS $$
+SELECT regexp_replace($1.page_id,'.*/(.*).jpg','\1');
+
+create index mark_page_ark on mark (page_ark(mark));
+
+$$
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE FUNCTION |
+|-----------------|
+
+*** Postgis Functions
+
+In a similar fashion, we need to create spatial columns and indicies for the
+dataset marks.  These are used for extracting text and prices based on
+
+We need these for both the implicator ....
+#+BEGIN_SRC sql
+CREATE or replace function implicator_bbox (in m datafest.mark, out implicator_bbox geometry('Polygon',32662) )
+LANGUAGE SQL IMMUTABLE AS $$
+select st_setsrid(
+ st_makebox2d(st_makepoint(m.implicator_left,-m.implicator_bottom),
+ st_makepoint(m.implicator_right,-m.implicator_top)),32662)::geometry('Polygon',32662) as implicator_bbox;
+$$;
+
+drop index if exists mark_implicator_bbox;
+create index mark_implicator_bbox on mark USING GIST (implicator_bbox(mark));
+
+#+END_SRC
+
+
+#+RESULTS:
+| CREATE FUNCTION |
+|-----------------|
+| DROP INDEX      |
+| CREATE INDEX    |
+
+
+And the regions ...
+
+#+BEGIN_SRC sql
+CREATE or replace function region_bbox (in m datafest.mark, out region_bbox geometry('Polygon',32662) )
+LANGUAGE SQL IMMUTABLE AS $$
+select st_setsrid(
+ st_makebox2d(st_makepoint(m.region_left,-m.region_bottom),
+ st_makepoint(m.region_right,-m.region_top)),32662)::geometry('Polygon',32662) as region_bbox;
+$$;
+
+drop index if exists mark_region_bbox;
+create index mark_region_bbox on mark USING GIST (region_bbox(mark));
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE FUNCTION |
+|-----------------|
+| DROP INDEX      |
+| CREATE INDEX    |
+
+These can all be used as functions directly on the mark table.
+
+#+BEGIN_SRC sql :tangle no
+select m.page_ark,st_asEWKT(m.implicator_bbox) as i,st_asEWKT(m.region_bbox) as r from datafest.mark m limit 2;
+#+END_SRC
+
+#+RESULTS:
+| page_ark   | i                                                                         | r                                                                          |
+|------------+---------------------------------------------------------------------------+----------------------------------------------------------------------------|
+| d7160g-014 | SRID=32662;POLYGON((3112 -496,3112 -256,4872 -256,4872 -496,3112 -496))   | SRID=32662;POLYGON((2872 -3264,2872 -696,5024 -696,5024 -3264,2872 -3264)) |
+| d7dm1d-021 | SRID=32662;POLYGON((204 -1211,204 -1083,1056 -1083,1056 -1211,204 -1211)) | SRID=32662;POLYGON((140 -2043,140 -1135,1448 -1135,1448 -2043,140 -2043))  |
+
+Though for applicaitons such as qgis, we are better off to create some views, so
+they can be more easily used.
+
+#+BEGIN_SRC sql
+create view datafest.mark_bbox as select m.mark_id,m.page_ark,m.implicator_bbox,m.region_bbox
+from datafest.mark m;
+
+#+END_SRC
+
+#+RESULTS:
+| CREATE VIEW |
+|-------------|
+
+*** Other Views
+
+Most other views involve relations between these data and other schemas, and are
+there for in the [[file:03_functions.org][03_functions]] section.
 
 *** Authentication
 
