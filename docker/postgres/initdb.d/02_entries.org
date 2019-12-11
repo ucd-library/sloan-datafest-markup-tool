@@ -15,7 +15,7 @@ create schema wine_search;
 | CREATE SCHEMA |
 
 #+BEGIN_SRC sql
-CREATE TABLE wine_search.prices (
+CREATE TABLE wine_search.search_prices (
     page_ark text,
     ark text,
     page integer,
@@ -43,10 +43,57 @@ CREATE TABLE wine_search.prices (
 These are also imported from the initialization script
 
 #+BEGIN_SRC sql
-copy wine_search.prices from 'io/wine_search.csv' with csv header;
+copy wine_search.search_prices from 'io/wine_search.csv' with csv header;
 
 #+END_SRC
 
 #+RESULTS:
 | COPY 214018 |
 |-------------|
+
+** POSTGIS
+
+This data is also, not quite ready for postgis interactions, we need to create a
+bbox from the geojson in that file.
+
+#+BEGIN_SRC sql
+create materialized view wine_search.price as
+select
+row_number() OVER (order by page_ark) as price_id,
+page_ark,ark,
+name,vintage,type,color,country,section,bottle_type,
+perprice,caseprice,
+st_setsrid(st_geomfromgeojson(bbox),32662)  as bbox
+from wine_search.search_prices;
+#+END_SRC
+
+#+RESULTS:
+| SELECT 214018 |
+|---------------|
+
+And let's go ahead and create some indices on the page_ark and the bbox
+
+#+BEGIN_SRC sql
+create index price_bbox on wine_search.price USING GIST(bbox);
+create index price_page_ark on wine_search.price(page_ark);
+#+END_SRC
+
+#+RESULTS:
+| CREATE INDEX |
+|--------------|
+| CREATE INDEX |
+
+** Authorization
+
+#+BEGIN_SRC sql
+GRANT USAGE ON SCHEMA wine_search to PUBLIC;
+GRANT SELECT ON ALL TABLES IN SCHEMA wine_search to PUBLIC;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA wine_search to PUBLIC;
+
+#+END_SRC
+
+#+RESULTS:
+| GRANT |
+|-------|
+| GRANT |
+| GRANT |
