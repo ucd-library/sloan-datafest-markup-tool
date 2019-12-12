@@ -81,9 +81,6 @@ create index page_page_ark on rtesseract.page(page_ark);
 #+END_SRC
 
 #+RESULTS:
-| SELECT 7365  |
-|--------------|
-| CREATE INDEX |
 
 ** Authorization
 

@@ -65,7 +65,7 @@ alter role anon login ;
 By default we show a few different schemas in the search_path;
 
 #+BEGIN_SRC sql
-alter database :DBNAME set search_path to datafest,catalogs,public,pg_catalog;
+alter database :DBNAME set search_path to datafest,rtesseract,wine_search,catalogs,public,pg_catalog;
 #+END_SRC
 
 #+RESULTS:

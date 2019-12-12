@@ -1,0 +1,102 @@
+* Page Text
+#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
+
+We want to get materialized views for all the text in each page. This can be
+done from the word table, but needs to be ordered.
+
+We can use this data to compare the relative sizes of the text on pages.  For
+example, we can use the (included) whisker aggregation to calculate the median
+and q1,q3,qn,qx and outliers.
+
+#+BEGIN_SRC sql
+drop materialized view if exists rtesseract.page_text_lr;
+  create materialized view rtesseract.page_text_lr
+  as select page_ark,string_agg(text,' ' order by top,"left") as page_text
+  from rtesseract_words
+  group by page_ark;
+#+END_SRC
+
+#+RESULTS:
+| DROP MATERIALIZED VIEW |
+|------------------------|
+| SELECT 7365            |
+
+#+BEGIN_SRC sql
+grant select on all tables in schema rtesseract to public;
+#+END_SRC
+
+#+RESULTS:
+| GRANT |
+|-------|
+
+#+BEGIN_SRC sql
+with w as (
+  select page_ark,
+  st_ymax(w.bbox)-st_ymin(w.bbox) as height,
+  st_xmax(w.bbox)-st_xmin(w.bbox) as w
+  from rtesseract.word w),
+b as (select page_ark,whisker(height::numeric) as h
+  from w
+  group by page_ark
+)
+select page_ark,(h).qn,(h).median,(h).qx
+from b
+#+END_SRC
+
+#+RESULTS:
+| page_ark   |   qn | median |   qx |
+|------------+------+--------+------|
+| d74s4s-027 | 26.5 |     46 | 65.5 |
+
+So, one quick headline follower would be to find all the words that are
+unusually big.
+
+#+BEGIN_SRC sql
+  with w as (
+    select page_ark,text,
+    st_ymin(w.bbox) as ym,
+    st_xmin(w.bbox) as xm,
+    st_ymax(w.bbox)-st_ymin(w.bbox) as height,
+    st_xmax(w.bbox)-st_xmin(w.bbox) as w
+    from rtesseract.word w),
+  b as (select page_ark,whisker(height::numeric) as h
+    from w
+    where page_ark='d74s4s-027'
+    group by page_ark
+  )
+ select page_ark,(ym/(b.h).q3)::integer as line,
+  string_agg(text,' ') as text
+  from w join b using (page_ark)
+  where height>(b.h).qx
+  group by page_ark,line
+  order by page_ark,line desc
+#+END_SRC
+
+#+RESULTS:
+| page_ark   | line | text                             |   |
+|------------+------+----------------------------------+---|
+| d74s4s-027 |   -8 | Ry,                              |   |
+| d74s4s-027 |  -14 | LOIRE VALLEY-RED                 |   |
+| d74s4s-027 |  -15 |                                  | A |
+| d74s4s-027 |  -24 | LOIRE VALLEY-WHITE               |   |
+| d74s4s-027 |  -34 | 2.                               |   |
+| d74s4s-027 |  -39 | Al                               |   |
+| d74s4s-027 |  -45 | RHONE VALLEY-RED                 |   |
+| d74s4s-027 |  -46 | a                                |   |
+| d74s4s-027 |  -51 | 264                              |   |
+| d74s4s-027 |  -53 | 244                              |   |
+| d74s4s-027 |  -63 | VALLEY-WHITE RHONE               |   |
+| d74s4s-027 |  -67 | \                                |   |
+| d74s4s-027 |  -79 | Wy                               |   |
+| d74s4s-027 |  -81 | ed Sh                            |   |
+| d74s4s-027 |  -84 | nae RY Ea Be                     |   |
+| d74s4s-027 |  -85 | NEE 7 SNR                        |   |
+| d74s4s-027 |  -87 | 1.99 ch ye SOR                   |   |
+| d74s4s-027 |  -90 | A 2.99 Pa SAS WE, Bi             |   |
+| d74s4s-027 |  -91 | Nia                              |   |
+| d74s4s-027 |  -92 | 50) To ES CaN                    |   |
+| d74s4s-027 |  -93 | SEE <a a Fea € 8 WERENT          |   |
+| d74s4s-027 |  -94 | Vogl ERE 4 (RL                   |   |
+| d74s4s-027 |  -95 | 8 Cer yp CO “AED Se sa Gh Lh SEY |   |
+| d74s4s-027 | -100 | 6                                |   |
+| d74s4s-027 | -102 | 34                               |   |
