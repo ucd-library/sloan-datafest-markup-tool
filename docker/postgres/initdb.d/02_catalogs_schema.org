@@ -508,3 +508,17 @@ d7zw8s,D-637/d7zw8s.ttl,1996,Autumn 1995: Sherry-Lehmann Autumn Wine Sale Salute
 | CREATE TABLE |
 |--------------|
 | COPY 391     |
+
+** Authorization
+
+#+BEGIN_SRC sql
+GRANT USAGE ON SCHEMA catalogs to PUBLIC;
+GRANT SELECT ON ALL TABLES IN SCHEMA catalogs to PUBLIC;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA catalogs to PUBLIC;
+#+END_SRC
+
+#+RESULTS:
+| GRANT |
+|-------|
+| GRANT |
+| GRANT |

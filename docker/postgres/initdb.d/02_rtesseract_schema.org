@@ -82,6 +82,20 @@ create index page_page_ark on rtesseract.page(page_ark);
 
 #+RESULTS:
 
+
+#+BEGIN_SRC sql
+drop materialized view if exists rtesseract.page_text;
+  create materialized view rtesseract.page_text
+  as select page_ark,string_agg(text,' ' order by word_id) as page_text
+  from rtesseract.word
+  group by page_ark;
+#+END_SRC
+
+#+RESULTS:
+| DROP MATERIALIZED VIEW |
+|------------------------|
+| SELECT 7365            |
+
 ** Authorization
 
 #+BEGIN_SRC sql

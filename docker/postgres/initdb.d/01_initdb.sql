@@ -16,4 +16,4 @@ GRANT admin TO authenticator;
 alter user anon encrypted password 'anon';
 alter role anon login ;
 
-alter database :DBNAME set search_path to datafest,catalogs,public,pg_catalog;
+alter database :DBNAME set search_path to datafest,rtesseract,wine_search,catalogs,public,pg_catalog;
