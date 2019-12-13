@@ -1,0 +1,15 @@
+* Map
+#+PROPERTY: header-args:sql :engine postgresql :cmdline "service=datafest201912" :tangle yes
+
+#+BEGIN_SRC sql
+  select * from quinn.sz limit 10;
+#+END_SRC
+
+#+RESULTS:
+| word_id         | page_ark   |  h |   w |
+|-----------------+------------+----+-----|
+| d7866x-004-1905 | d7866x-004 | 37 |  62 |
+| d7866x-004-1906 | d7866x-004 | 38 | 133 |
+| d7866x-004-1907 | d7866x-004 | 36 |  49 |
+| d7866x-004-1908 | d7866x-004 | 25 |  26 |
+| d7866x-004-1909 | d7866x-004 | 26 |  44 |
